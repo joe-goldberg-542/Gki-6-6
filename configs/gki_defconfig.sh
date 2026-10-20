@@ -16,6 +16,9 @@ CONFIG_KPM=y
 EOF
 fi
 
+echo "🧩 Adding Built-in Features"
+apply_config "$WORKDIR/configs/features.config" "$DEFCONFIG"
+
 if [ "$KSU_SUSFS" = "true" ]; then
   echo "🔧 Mode: SuSFS Hook Enabled"
   apply_config "$WORKDIR/configs/susfs.config" "$DEFCONFIG"
@@ -53,6 +56,11 @@ EOF
     ;;
 esac
 
+if [ "$No_DS" = "true" ]; then
+  export DROIDSPACES="false"
+  export NH="false"
+fi
+
 if [ "$DROIDSPACES" = "true" ]; then
   echo "🐳 DroidSpaces support enabled"
   apply_config "$WORKDIR/configs/droidspaces.config" "$DEFCONFIG"
@@ -67,8 +75,6 @@ if [ "$KSU_COMPAT" != "true" ]; then
   echo "🔧 Disable useless debugging configs for performance and resources"
   cat >> $DEFCONFIG <<EOF
 # Disable useless debugging configs for performance and resources
-CONFIG_UBSAN=n
-CONFIG_PAGE_OWNER=n
 CONFIG_RCU_TRACE=n
 EOF
 fi

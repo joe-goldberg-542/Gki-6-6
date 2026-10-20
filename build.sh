@@ -28,7 +28,7 @@ PATCHES_DIR="$WORKDIR/patches"
 
 source $WORKDIR/functions.sh
 
-if [ "$KERNEL_VERSION" = "6.1" ]; then
+if kernel_version_eq "$KERNEL_VERSION" "6.1"; then
   if [ "$NH" = "true" ]; then
     KERNEL_BRANCH="GKID-NH"
   else
@@ -58,7 +58,7 @@ trap 'echo "[-] Received SIGTERM at $(date) - possible GitHub kill" >> "$BUILD_L
 trap 'echo "[-] Received SIGINT at $(date)" >> "$BUILD_LOGS"' INT
 
 log "Cloning kernel source from $(simplify_gh_url "$KERNEL_REPO")"
-if [ "$KERNEL_VERSION" = "6.1" ]; then
+if kernel_version_eq "$KERNEL_VERSION" "6.1"; then
   git clone -q --depth=1 --recurse-submodules "$KERNEL_REPO" -b "$KERNEL_BRANCH" "$KSRC"
 else
   git clone -q --depth=1 "$KERNEL_REPO" -b "$KERNEL_BRANCH" "$KSRC"
@@ -74,9 +74,8 @@ cd $WORKDIR
 log "Setting Kernel variant"
 case "$KSU" in
   "SKSU") VARIANT="SukiSU-Ultra" ;;
-  "RSKSU") VARIANT="ReSukiSU" ;;
+  "BSU") VARIANT="BakaSU" ;;
   "KSU") VARIANT="KernelSU" ;;
-  "KSUN") VARIANT="KernelSU-Next" ;;
   "no") VARIANT="Vanilla" ;;
   "vnlto") VARIANT="Vanilla+NoLTO" ;;
   *) VARIANT="Vanilla" ;;
@@ -87,7 +86,7 @@ SUSFS_URL="https://gitlab.com/simonpunk/susfs4ksu"
 SUSFS_DIR="$WORKDIR/susfs"
 SUSFS_PATCHES="${SUSFS_DIR}/kernel_patches"
 
-if [ "$KERNEL_VERSION" = "6.1" ]; then
+if kernel_version_eq "$KERNEL_VERSION" "6.1"; then
   SUSFS_BRANCH="gki-android14-6.1"
   SUSFS_PATCH="gki-android14-6.1"
 else
@@ -102,7 +101,7 @@ git log --pretty=format:"- [%h](https://${SUSFS_URL#https://}/commit/%H) %s" -5 
 > "$RELEASE_DIR/susfs_changelog-${KERNEL_VERSION}.txt"
 cd ..
 
-if [ "$KERNEL_VERSION" = "6.1" ]; then
+if kernel_version_eq "$KERNEL_VERSION" "6.1"; then
   generate_gh_changelog "ahmed-alnassif/GKI-Duchamp-6.1" "$KERNEL_BRANCH" 10 "$RELEASE_DIR/android_kernel-6.1_changelog.txt"
 else
   echo "No changelog generator wired up yet for $KERNEL_VERSION" \
@@ -110,8 +109,7 @@ else
 fi
 generate_gh_changelog "maxsteeel/nomount" "master" 5 "$RELEASE_DIR/nomount_changelog.txt"
 generate_gh_changelog "tiann/KernelSU" "main" 5 "$RELEASE_DIR/ksu_changelog.txt"
-generate_gh_changelog "ReSukiSU/ReSukiSU" "main" 5 "$RELEASE_DIR/ReSukiSU_changelog.txt"
-generate_gh_changelog "KernelSU-Next/KernelSU-Next" "dev" 5 "$RELEASE_DIR/ksun_changelog.txt"
+generate_gh_changelog "Baka-SU/BakaSU" "main" 5 "$RELEASE_DIR/BakaSU_changelog.txt"
 
 echo "::group::[*] Downloading Clang"
 CLANG_BIN="$WORKDIR/neutron-clang/bin"
@@ -152,7 +150,7 @@ echo "::endgroup::"
 
 echo "::group::[+] Applied patches"
 
-if [ "$KERNEL_VERSION" != "6.1" ]; then
+if ! kernel_version_eq "$KERNEL_VERSION" "6.1"; then
   apply_kernel_patches
   apply_force_load_module_patch
   apply_extract_cert_key_pass_patch
@@ -168,7 +166,7 @@ if kernel_version_lt "$KERNEL_VERSION" "6.12"; then
   log "Applying NTSync patches..."
   curl -LSs "https://github.com/WildKernels/kernel_patches/raw/main/common/ntsync/ntsync_base.patch" | apply_patch_file
 
-  if [ "$KERNEL_VERSION" = "6.1" ]; then
+  if kernel_version_eq "$KERNEL_VERSION" "6.1"; then
     curl -LSs "https://github.com/WildKernels/kernel_patches/raw/main/common/ntsync/ntsync_compat_android14-6.1.patch" | apply_patch_file
   else
     apply_ntsync_compat_patch "$KERNEL_KMI"
@@ -180,21 +178,25 @@ log "BBG included"
 wget -qO- "https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh" | bash
 sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' "security/Kconfig"
 
-if [ "$KSU" = "no" ] || [ "$KSU" = "vnlto" ]; then
+if [ "$KSU" = "no" ] || [ "$KSU" = "vnlto" ] || [ "$No_DS" = "true" ]; then
   export DROIDSPACES="false"
-  warning "DroidSpaces doesn't supported in vanilla builds"
+  export NH="false"
+  warning "DroidSpaces/NetHunter doesn't supported in this builds"
   VARIANT+="+NoDS"
 fi
 
 if { [ "$DROIDSPACES" = "true" ] || [ "$NH" = "true" ]; } && kernel_version_lt "$KERNEL_VERSION" "6.12"; then
   log "Applying DroidSpaces/NetHunter sysvipc patch"
   apply_patch_file "$KERNEL_PATCHES/droidspaces/001.GKI-below-6.12-fix_sysvipc_kabi_6_7_8.patch"
+  if kernel_version_eq "$KERNEL_VERSION" "5.10"; then
+    apply_patch_file "$KERNEL_PATCHES/droidspaces/002.5.10_or_lower_use_android_abi_padding_for_posix_mqueue.patch"
+  fi
 elif [ "$DROIDSPACES" = "true" ] || [ "$NH" = "true" ]; then
   log "Applying DroidSpaces/NetHunter sysvipc patch"
   apply_patch_file "$KERNEL_PATCHES/droidspaces/001.GKI-6.12-or-above-fix_sysvipc_kabi.patch"
 fi
 
-if [ "$NH" = "true" ]; then
+if [ "$NH" = "true" ] && ! kernel_version_eq "$KERNEL_VERSION" "6.1" && [ "$No_DS" = "false" ]; then
   log "Applying NetHunter patches"
   apply_patch_file "$KERNEL_PATCHES/nethunter/0001-mac80211-cfg80211-Add-monitor-mode-and-packet-inject.patch"
   git clone --depth=1 "https://github.com/ahmed-alnassif/rtw88"
@@ -207,14 +209,9 @@ if [ "$NH" = "true" ]; then
 fi
 
 set -eo pipefail
-if susfs_included && [ "$KSU" = "RSKSU" ]; then
-  log "ReSukiSU included"
-
-  git clone --depth=1 "https://github.com/ReSukiSU/ReSukiSU" -b "sync-upstream"
-
-  bash "ReSukiSU/kernel/setup.sh" "sync-upstream"
-
-  # install_ksu "ReSukiSU/ReSukiSU" "main"
+if susfs_included && [ "$KSU" = "BSU" ]; then
+  log "BakaSU included"
+  install_ksu "Baka-SU/BakaSU" "main"
 
   clone_susfs
   apply_susfs_patches
@@ -236,8 +233,8 @@ if [ "$KSU" = "KSU" ]; then
     #git reset --hard "61c6313"
     git reset --soft HEAD~1
     apply_patch_file "$PATCHES_DIR/0001-feat-avc-log-spoofing.patch"
-    apply_patch_file "$PATCHES_DIR/0001-feat-add-multiple-managers.patch"
-    apply_patch_file "$PATCHES_DIR/0001-feat-throne_tracker-offload-to-kthread.patch"
+    #apply_patch_file "$PATCHES_DIR/0001-feat-add-multiple-managers.patch"
+    #apply_patch_file "$PATCHES_DIR/0001-feat-throne_tracker-offload-to-kthread.patch"
     apply_patch_file "$SUSFS_PATCHES/KernelSU/10_enable_susfs_for_ksu.patch"
     apply_patch_file "$PATCHES_DIR/0001-feat-escape-persistent_allow_list-to-kthread.patch"
     apply_patch_file "$PATCHES_DIR/0001-feat-supercalls-allow-userspace-to-pull-list-entries.patch"
@@ -249,23 +246,6 @@ if [ "$KSU" = "KSU" ]; then
     cd ..
     bash "KernelSU/kernel/setup.sh" "main"
 
-    apply_susfs_patches
-
-  fi
-
-fi
-
-if [ "$KSU" = "KSUN" ]; then
-  log "KernelSU-Next included"
-  if susfs_included; then
-    install_ksu "pershoot/KernelSU-Next" "dev-susfs"
-  else
-    install_ksu "KernelSU-Next/KernelSU-Next" "dev"
-  fi
-
-  if susfs_included; then
-
-    clone_susfs
     apply_susfs_patches
 
   fi
@@ -297,8 +277,8 @@ source "$WORKDIR/configs/gki_defconfig.sh"
 
 if [ "${TODO:-kernel}" = "kernel" ]; then
   LATEST_COMMIT_HASH=$(git rev-parse --short HEAD)
-  SUFFIX="${RELEASE}/${LATEST_COMMIT_HASH}"
-  config --set-str CONFIG_LOCALVERSION "-$KERNEL_NAME/$SUFFIX"
+  SUFFIX="${RUN_NUM}-${LATEST_COMMIT_HASH}"
+  config --set-str CONFIG_LOCALVERSION "-${KERNEL_NAME}${SUFFIX}"
   config --disable CONFIG_LOCALVERSION_AUTO
   sed -i 's/echo "+"/# echo "+"/g' scripts/setlocalversion
 fi

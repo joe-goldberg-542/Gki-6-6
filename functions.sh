@@ -30,6 +30,12 @@ declare -A GKI_SUSFS_BRANCH=(
   ["6.12"]="gki-android16-6.12"
 )
 
+declare -A GKI_SUSFS_COMMIT=(
+#  ["6.1"]="153f88df3be2501d2d33364f8fe05247aecb3cef"
+#  ["6.6"]="3f0b811b2e105afd8dc858cd71389090e01f404b"
+#  ["6.12"]="fb58aef70a9c2aca8f0f85fba14017af94c4e789"
+)
+
 android_release_for_version() {
   echo "${ANDROID_RELEASE_FOR_KVER[$1]:-unknown}"
 }
@@ -72,6 +78,26 @@ kernel_version_lt() {
     if ((10#$ai > 10#$bi)); then return 1; fi
   done
   return 1
+}
+
+kernel_version_eq() {
+  [ "$1" = "$2" ] || return 1
+  return 0
+}
+
+kernel_version_ge() {
+  kernel_version_lt "$1" "$2" && return 1
+  return 0
+}
+
+kernel_version_gt() {
+  [ "$1" = "$2" ] && return 1
+  kernel_version_lt "$2" "$1"
+}
+
+kernel_version_le() {
+  kernel_version_gt "$1" "$2" && return 1
+  return 0
 }
 
 apply_ntsync_compat_patch() {
@@ -348,7 +374,7 @@ apply_extract_cert_key_pass_patch() {
 
 fix_task_mmu_corruption() {
     local file="fs/proc/task_mmu.c"
-    local patch="$KERNEL_PATCHES/susfs/0001-fixup-Remove-broken-hunk-from-task_mmu.c-SUSFS-patch.patch"
+    local patch="$KERNEL_PATCHES/susfs/0001-fix-sync-task_mmu.c-SuSFS-patch-with-upstream.patch"
 
     if [[ ! -f "$file" ]]; then
         warning "task_mmu.c not found, skipping fix"
@@ -516,7 +542,30 @@ apply_susfs_patches() {
 
 clone_susfs() {
     DEPTH=${1:-1}
+    local pin="${GKI_SUSFS_COMMIT[$KERNEL_VERSION]:-}"
+
     if [ ! -d "$SUSFS_DIR" ]; then
-        git clone --depth=$DEPTH -q "$SUSFS_URL" -b "$SUSFS_BRANCH" "$SUSFS_DIR"
+        if [ -n "$pin" ]; then
+            log "Cloning $SUSFS_URL (branch $SUSFS_BRANCH) to pin commit $pin"
+            git clone -q --single-branch -b "$SUSFS_BRANCH" "$SUSFS_URL" "$SUSFS_DIR"
+        else
+            log "Cloning $SUSFS_URL (branch $SUSFS_BRANCH, depth $DEPTH, no pin)"
+            git clone --depth=$DEPTH -q "$SUSFS_URL" -b "$SUSFS_BRANCH" "$SUSFS_DIR"
+        fi
+    else
+        log "$SUSFS_DIR already exists, reusing existing clone"
     fi
+
+    if [ -n "$pin" ]; then
+        git -C "$SUSFS_DIR" fetch -q origin "$pin" 2>/dev/null || true
+        if ! git -C "$SUSFS_DIR" checkout -q "$pin"; then
+            error "Failed to checkout pinned commit $pin for KERNEL_VERSION=$KERNEL_VERSION on branch $SUSFS_BRANCH"
+            exit 1
+        fi
+        success "Commit pin $pin applied for KERNEL_VERSION=$KERNEL_VERSION (branch $SUSFS_BRANCH)"
+    else
+        log "No commit pin configured for KERNEL_VERSION=$KERNEL_VERSION, using branch $SUSFS_BRANCH tip"
+    fi
+
+    log "susfs4ksu HEAD is now $(git -C "$SUSFS_DIR" rev-parse HEAD)"
 }

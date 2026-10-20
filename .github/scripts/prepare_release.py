@@ -168,7 +168,7 @@ def build_release_body():
 
 ## ❤️ Support This Project
 
-**USDT (TRC20):** `TCyghELuquAtoUFdY65iuJSMqJXbYhWidA`
+**[Donations](https://github.com/ahmed-alnassif#-support-my-work)**
 
 Your donations keep this project alive! I spend countless hours maintaining kernel builds for 5 different versions, fixing bugs, adding features, and supporting users. **Every donation matters!** 🙏
 
@@ -190,17 +190,15 @@ Your donations keep this project alive! I spend countless hours maintaining kern
 | Variant | Root | SuSFS | LTO | Compat |
 |---------|------|-------|-----|--------|
 | Vanilla | ❌ | ❌ | Full | ❌ |
-| Vanilla+NoLTO | ❌ | ❌ | None | ❌ |
+| Vanilla+NoLTO | ❌ | ❌ | ❌ | ❌ |
 | KernelSU | ✅ | ❌ | Full | ❌ |
 | KernelSU+SuSFS | ✅ | ✅ | Full | ❌ |
 | KSU+SuSFS+MM | ✅ | ✅ | Full | ❌ |
-| KernelSU-Next | ✅ | ❌ | Full | ❌ |
-| KSU-Next+SuSFS | ✅ | ✅ | Full | ❌ |
-| Compat+KSU+SuSFS | ✅ | ✅ | Full | ✅ |
-| Compat+KSU-Next+SuSFS | ✅ | ✅ | Full | ✅ |
-| Compat+LTO+KSU-Next+SuSFS | ✅ | ✅ | Full | ✅ |
+| BakaSU+SuSFS | ✅ | ✅ | Full | ❌ |
+| Compat+KSU+SuSFS | ✅ | ✅ | ❌ | ✅ |
+| Compat+BakaSU+SuSFS | ✅ | ✅ | ❌ | ✅ |
 
-**Not sure? Use a `Compat` variant first**: it fixes most boot issues, vendor module failures, and KMI mismatches. Full feature breakdown, LTO explanation, and troubleshooting live in the [README](https://github.com/ahmed-alnassif/GKID-Kernels#-build-variants).
+**Not sure? Use a `Compat` variant first**: it fixes most boot issues. Full feature breakdown, LTO explanation, and troubleshooting live in the [README](https://github.com/ahmed-alnassif/GKID-Kernels#-build-variants).
 
 ## Contents
 {toc_block}
@@ -301,18 +299,11 @@ Test both and use whichever performs better on your network.
 **Full commit history:** [Browse all commits](https://github.com/tiann/KernelSU/commits/main)
 
 ---
-**ReSukiSU changelog (last 5 commits):**
+**BakaSU changelog (last 5 commits):**
 
-{read_or_default("release-artifacts/ReSukiSU_changelog.txt")}
+{read_or_default("release-artifacts/BakaSU_changelog.txt")}
 
-**Full commit history:** [Browse all commits](https://github.com/ReSukiSU/ReSukiSU/commits/main)
-
----
-**KernelSU Next changelog (last 5 commits):**
-
-{read_or_default("release-artifacts/ksun_changelog.txt")}
-
-**Full commit history:** [Browse all commits](https://github.com/KernelSU-Next/KernelSU-Next/commits/dev)
+**Full commit history:** [Browse all commits](https://github.com/Baka-SU/BakaSU/commits/main)
 
 ---
 > [!Tip]

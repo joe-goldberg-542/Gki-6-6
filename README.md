@@ -11,8 +11,7 @@
 [![GitHub License](https://img.shields.io/github/license/ahmed-alnassif/GKID-Kernels?logo=gnu)](/LICENSE)
 [![SuSFS](https://img.shields.io/badge/SuSFS-4CAF50?&logo=gitlab&logoColor=white)](https://gitlab.com/simonpunk/susfs4ksu)
 [![KernelSU](https://img.shields.io/badge/KernelSU-000000?&logo=github&logoColor=white)](https://github.com/tiann/KernelSU)
-[![KernelSU Next](https://img.shields.io/badge/KernelSU--Next-1976D2?&logo=github&logoColor=white)](https://github.com/KernelSU-Next/KernelSU-Next)
-[![ReSukiSU](https://img.shields.io/badge/ReSukiSU-E91E63?&logo=github&logoColor=white)](https://github.com/ReSukiSU/ReSukiSU)
+[![BakaSU](https://img.shields.io/badge/BakaSU-E91E63?&logo=github&logoColor=white)](https://github.com/Baka-SU/BakaSU)
 [![Managers](https://img.shields.io/badge/Managers-multiple-success)](https://github.com/ahmed-alnassif/GKID-Kernels/releases)
 
 **⚡ Blazing fast GKI kernel for Android** with KernelSU, SuSFS, NetHunter, NTSync, performance optimizations, battery improvements, and advanced security features.
@@ -27,7 +26,13 @@
 
 ## ❤️ Support This Project
 
-**USDT (TRC20):** `TCyghELuquAtoUFdY65iuJSMqJXbYhWidA`
+**Tron (TRC20):** `TK7s2HGGWoLuefoznbVMZdiCpEwSTvZ1CV`
+
+**Bitcoin (BTC):** `bc1qstka58vn66qutzhgaalxfm7jn4d7xmgkze26sk`
+
+**Ethereum (ERC20):** `0xa13F8baaa24b563896a8ddAA3089317d43344C55`
+
+**ShamCash:** `a7da9b01b8faf8e3b3839f1b9f2b8d04`
 
 Your donations keep this project alive! I spend countless hours maintaining kernel builds for 5 different versions, fixing bugs, adding features, and supporting users. **Every donation matters!** 🙏
 
@@ -65,16 +70,13 @@ Your donations keep this project alive! I spend countless hours maintaining kern
 | Variant | Root | SuSFS | LTO | Compat |
 |---------|------|-------|-----|--------|
 | Vanilla | ❌ | ❌ | Full | ❌ |
-| Vanilla+NoLTO | ❌ | ❌ | None | ❌ |
+| Vanilla+NoLTO | ❌ | ❌ | ❌ | ❌ |
 | KernelSU | ✅ | ❌ | Full | ❌ |
 | KernelSU+SuSFS | ✅ | ✅ | Full | ❌ |
 | KSU+SuSFS+MM | ✅ | ✅ | Full | ❌ |
-| KernelSU-Next | ✅ | ❌ | Full | ❌ |
-| KSU-Next+SuSFS | ✅ | ✅ | Full | ❌ |
-| ReSukiSU+SuSFS | ✅ | ✅ | Full | ❌ |
-| Compat+KSU+SuSFS | ✅ | ✅ | Full | ✅ |
-| Compat+KSU-Next+SuSFS | ✅ | ✅ | Full | ✅ |
-| Compat+LTO+KSU-Next+SuSFS | ✅ | ✅ | Full | ✅ |
+| BakaSU+SuSFS | ✅ | ✅ | Full | ❌ |
+| Compat+KSU+SuSFS | ✅ | ✅ | ❌ | ✅ |
+| Compat+BakaSU+SuSFS | ✅ | ✅ | ❌ | ✅ |
 
 **Optional features** (enable on any variant):
 - 🐳 DroidSpaces - Linux userspace support
@@ -172,8 +174,7 @@ Your donations keep this project alive! I spend countless hours maintaining kern
 | Feature | Description |
 |---------|-------------|
 | **KernelSU** | Stable kernel-based root with excellent hiding |
-| **KernelSU-Next** | Community fork with bleeding-edge features |
-| **ReSukiSU** | ReSukiSU kernel integration |
+| **BakaSU** | BakaSU kernel integration |
 | **Multiple Managers** | Run multiple KernelSU managers simultaneously |
 | **Vanilla** | No root for banking and corporate apps |
 
@@ -254,8 +255,6 @@ Separate KernelSU module containing wireless drivers and firmware when built as 
 
 **Use Compat if:**
 - You experience boot issues
-- Vendor modules fail to load
-- Device KMI mismatch
 - Standard variants don't boot
 
 ---

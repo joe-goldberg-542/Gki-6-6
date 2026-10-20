@@ -53,13 +53,8 @@ on:
         type: boolean
         default: true
 
-      BUILD_KSUN:
-        description: "Build with KernelSU-Next"
-        type: boolean
-        default: true
-
       BUILD_KSU_SUSFS:
-        description: "Build with KernelSU and its forks (KernelSU Next) + SUSFS"
+        description: "Build with KernelSU and its forks + SUSFS"
         type: boolean
         default: true
 
@@ -81,7 +76,7 @@ on:
       NM:
         description: "Enable NoMount support"
         type: boolean
-        default: true
+        default: false
 
 env:
   MAN_DISABLE: true
@@ -127,7 +122,6 @@ jobs:
           KERNEL_VERSION: ${{ github.event.inputs.KERNEL_VERSION }}
           BUILD_VANILLA: ${{ github.event.inputs.BUILD_VANILLA }}
           BUILD_KSU: ${{ github.event.inputs.BUILD_KSU }}
-          BUILD_KSUN: ${{ github.event.inputs.BUILD_KSUN }}
           BUILD_KSU_SUSFS: ${{ github.event.inputs.BUILD_KSU_SUSFS }}
         run: |
           python3 py/generate-matrix.py >> "$GITHUB_OUTPUT"
@@ -152,6 +146,7 @@ jobs:
           pip install lxml
 
       - name: Restore ccache from release
+        if: github.event.inputs.TEST == 'no' && github.event.inputs.TODO != 'defconfig'
         id: restore-ccache
         uses: ./.github/actions/ccache-restore
         with:
@@ -168,6 +163,7 @@ jobs:
           KSU_COMPAT: ${{ matrix.KSU_COMPAT }}
           KSU_SUSFS: ${{ matrix.KSU_SUSFS }}
           C_LTO: ${{ matrix.C_LTO }}
+          No_DS: ${{ matrix.No_DS }}
           TODO: ${{ inputs.TODO }}
           TEST: ${{ inputs.TEST }}
           LTO: ${{ inputs.LTO }}
@@ -220,7 +216,7 @@ jobs:
           ccache --show-stats
 
       - name: Save ccache to release
-        if: always()
+        if: always() && github.event.inputs.TEST == 'no' && github.event.inputs.TODO != 'defconfig'
         uses: ./.github/actions/ccache-save
         with:
           repo: ${{ github.repository }}
@@ -406,7 +402,7 @@ jobs:
 
           [**Download**]($RELEASE_URL)
 
-          [**Support the project**](https://github.com/ahmed-alnassif/GKID-Kernels#-support-this-project)
+          [**Support the project**](https://github.com/ahmed-alnassif#-support-my-work)
 
           [Commit]($COMMIT_URL) • [CI \#$RUN_NUMBER]($RUN_URL)
           EOF
@@ -438,12 +434,8 @@ jobs:
           $(read_or_default "release-artifacts/ksu_changelog.txt")
 
           \-\-\-
-          **ReSukiSU:**
-          $(read_or_default "release-artifacts/ReSukiSU_changelog.txt")
-
-          \-\-\-
-          **KernelSU Next:**
-          $(read_or_default "release-artifacts/ksun_changelog.txt")
+          **BakaSU:**
+          $(read_or_default "release-artifacts/BakaSU_changelog.txt")
           INNER
             )
 

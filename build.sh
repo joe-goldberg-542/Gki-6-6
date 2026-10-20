@@ -202,6 +202,49 @@ if [ "$KSU" = "KSU" ]; then
   fi
 fi
 
+# Inject KSU & SELinux Bridge Symbols
+if [ "$KSU" != "no" ] && [ "$KSU" != "vnlto" ] && [ -d "drivers/kernelsu" ]; then
+  log "Injecting KSU & SELinux Bridge Symbols"
+  cat << 'EOF' > drivers/kernelsu/compat_bridge.c
+#include <linux/types.h>
+#include <linux/fs.h>
+#include <linux/file.h>
+#include <linux/sched.h>
+#include <linux/uaccess.h>
+#include <linux/slab.h>
+
+bool ksu_setup_preinit_file(struct file *file)
+{
+    return false;
+}
+
+void ksu_preinit_handle_post_execveat(int fd, struct filename *filename, void *argv, void *envp, int flags)
+{
+}
+
+int my_setprocattr(const char *name, void *value, size_t size)
+{
+    return 1;
+}
+
+ssize_t my_write_context(struct file *file, const char __user *buf, size_t size, loff_t *ppos)
+{
+    return 0;
+}
+
+ssize_t my_write_access(struct file *file, const char __user *buf, size_t size, loff_t *ppos)
+{
+    return 0;
+}
+EOF
+
+  if [ -f "drivers/kernelsu/Kbuild" ]; then
+      echo "obj-y += compat_bridge.o" >> drivers/kernelsu/Kbuild
+  elif [ -f "drivers/kernelsu/Makefile" ]; then
+      echo "obj-y += compat_bridge.o" >> drivers/kernelsu/Makefile
+  fi
+fi
+
 if [ "$KSU_COMPAT" = "true" ]; then
   if [ "$C_LTO" = "true" ]; then
     VARIANT="Compat+${VARIANT}"

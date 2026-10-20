@@ -1,4 +1,3 @@
-#!/usr/init/env bash
 #!/usr/bin/env bash
 
 WORKDIR="$(pwd)"
@@ -11,7 +10,7 @@ TIMEZONE="Asia/Damascus"
 ANYKERNEL_REPO="https://github.com/ahmed-alnassif/AK3-GKID"
 
 KERNEL_DEFCONFIG="gki_defconfig"
-KERNEL_VERSION="${KERNEL_VERSION:-6.6}"
+KERNEL_VERSION="${KERNEL_VERSION:-6.1}"
 
 sudo timedatectl set-timezone "$TIMEZONE" || export TZ="$TIMEZONE"
 RELEASE="$(date +v%y.%m.%d)${RUN_NUM}"
@@ -51,9 +50,9 @@ cd $WORKDIR
 
 log "Setting Kernel variant"
 case "$KSU" in
-  "BSU") VARIANT="BakaSU+FullLTO" ;;
-  "no") VARIANT="Vanilla+FullLTO" ;;
-  *) VARIANT="BakaSU+FullLTO" ;;
+  "BSU") VARIANT="BakaSU" ;;
+  "no") VARIANT="Vanilla" ;;
+  *) VARIANT="BakaSU" ;;
 esac
 
 susfs_included && VARIANT+="+SuSFS"
@@ -106,7 +105,7 @@ MAKE_ARGS=(
   O="$OUTDIR"
 )
 
-log "Building kernel with Full LTO & Optimizations..."
+log "Building kernel..."
 make ${MAKE_ARGS[@]}
 
 cd $WORKDIR

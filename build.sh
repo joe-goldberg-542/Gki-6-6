@@ -1,3 +1,4 @@
+#!/usr/init/env bash
 #!/usr/bin/env bash
 
 WORKDIR="$(pwd)"
@@ -10,7 +11,7 @@ TIMEZONE="Asia/Damascus"
 ANYKERNEL_REPO="https://github.com/ahmed-alnassif/AK3-GKID"
 
 KERNEL_DEFCONFIG="gki_defconfig"
-KERNEL_VERSION="${KERNEL_VERSION:-6.1}"
+KERNEL_VERSION="${KERNEL_VERSION:-6.6}"
 
 sudo timedatectl set-timezone "$TIMEZONE" || export TZ="$TIMEZONE"
 RELEASE="$(date +v%y.%m.%d)${RUN_NUM}"
@@ -50,9 +51,9 @@ cd $WORKDIR
 
 log "Setting Kernel variant"
 case "$KSU" in
-  "BSU") VARIANT="BakaSU" ;;
-  "no") VARIANT="Vanilla" ;;
-  *) VARIANT="BakaSU" ;;
+  "BSU") VARIANT="BakaSU+FullLTO" ;;
+  "no") VARIANT="Vanilla+FullLTO" ;;
+  *) VARIANT="BakaSU+FullLTO" ;;
 esac
 
 susfs_included && VARIANT+="+SuSFS"
@@ -78,7 +79,7 @@ cd $KSRC
 
 if susfs_included && [ "$KSU" = "BSU" ]; then
   log "BakaSU included"
-  install_ksu "Baka-SU/BakaSU" "dev"
+  install_ksu "Baka-SU/BakaSU" "main"
   clone_susfs
   apply_susfs_patches
 fi
@@ -93,7 +94,7 @@ AK3_ZIP_NAME=${AK3_ZIP_NAME//KVER/$LINUX_VERSION}
 AK3_ZIP_NAME=${AK3_ZIP_NAME//VARIANT/$VARIANT}
 
 log "Generating config for POCO M6 Pro 5G (Sky)..."
-make LLVM=1 LLVM_IAS=1 ARCH=arm64 O="$OUTDIR" "$KERNEL_DEFCONFIG" vendor/parrot_perf.config[span_4](start_span)[span_4](end_span)[span_5](start_span)[span_5](end_span)
+make LLVM=1 LLVM_IAS=1 ARCH=arm64 O="$OUTDIR" "$KERNEL_DEFCONFIG" vendor/parrot_perf.config
 
 MAKE_ARGS=(
   LLVM=1
@@ -105,7 +106,7 @@ MAKE_ARGS=(
   O="$OUTDIR"
 )
 
-log "Building kernel..."
+log "Building kernel with Full LTO & Optimizations..."
 make ${MAKE_ARGS[@]}
 
 cd $WORKDIR

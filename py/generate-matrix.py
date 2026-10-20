@@ -12,8 +12,8 @@ DEFAULT = {
 	"KSU": "Dummy",
 	"KSU_COMPAT": "false",
 	"KSU_SUSFS": "false",
-	"C_LTO": "false",
-	"No_DS": "false"
+	"C_LTO": "true",
+	"No_DS": "true"
 }
 
 def config(**overrides) -> Dict[str, Any]:
@@ -22,7 +22,7 @@ def config(**overrides) -> Dict[str, Any]:
 	cfg.update(overrides)
 	return cfg
 
-# Build configurations
+# Build configurations (Only Compat + BakaSU + SuSFS + FullLTO)
 BUILD_CONFIGS: Dict[str, List[Dict[str, Any]]] = {
 	"BUILD_VANILLA": [
 		config(name="Vanilla", KSU="no"),
@@ -32,12 +32,14 @@ BUILD_CONFIGS: Dict[str, List[Dict[str, Any]]] = {
 		config(name="KSU", KSU="KSU")
 	],
 	"BUILD_KSU_SUSFS": [
-		config(name="KSU+SUSFS", KSU="KSU", KSU_SUSFS="true"),
-		config(name="Compat+KSU+SUSFS", KSU="KSU", KSU_COMPAT="true", KSU_SUSFS="true"),
-		config(name="BSU+SUSFS", KSU="BSU", KSU_SUSFS="true"),
-		config(name="Compat+BSU+SUSFS", KSU="BSU", KSU_COMPAT="true", KSU_SUSFS="true"),
-		config(name="Compat+NoDS+KSU+SUSFS", KSU="KSU", KSU_COMPAT="true", KSU_SUSFS="true", No_DS="true"),
-		config(name="Compat+NoDS+BSU+SUSFS", KSU="BSU", KSU_COMPAT="true", KSU_SUSFS="true", No_DS="true")
+		config(
+			name="Compat+BSU+SUSFS",
+			KSU="BSU",
+			KSU_COMPAT="true",
+			KSU_SUSFS="true",
+			C_LTO="true",
+			No_DS="true"
+		)
 	]
 }
 
@@ -51,7 +53,7 @@ def get_env_bool(var_name: str, default: bool = False) -> bool:
 	return value in ("true", "1", "yes", "on")
 
 def resolve_kernel_versions() -> List[str]:
-	selected = os.environ.get("KERNEL_VERSION", "All").strip()
+	selected = os.environ.get("KERNEL_VERSION", "6.6").strip()
 
 	if not selected or selected.lower() == "all":
 		return ALL_KERNEL_VERSIONS

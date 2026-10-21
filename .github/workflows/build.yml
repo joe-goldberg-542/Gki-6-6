@@ -388,4 +388,3 @@ jobs:
             release-artifacts/*.img
             release-artifacts/checksums.txt
             release-artifacts/checksums-md5.txt
-          body_path: release_body.md

@@ -83,6 +83,27 @@ env:
   DEBIAN_FRONTEND: noninteractive
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 1
+
+      - name: Generate build matrix
+        id: set-matrix
+        env:
+          KERNEL_VERSION: ${{ github.event.inputs.KERNEL_VERSION }}
+          BUILD_VANILLA: ${{ github.event.inputs.BUILD_VANILLA }}
+          BUILD_KSU: ${{ github.event.inputs.BUILD_KSU }}
+          BUILD_KSU_SUSFS: ${{ github.event.inputs.BUILD_KSU_SUSFS }}
+        run: |
+          python3 py/generate-matrix.py >> "$GITHUB_OUTPUT"
+
   ensure-cache-release:
     name: Ensure ccache release exists
     needs: prepare
@@ -105,29 +126,10 @@ jobs:
               --latest=false
           fi
 
-  prepare:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-
-    steps:
-      - name: Checkout source
-        uses: actions/checkout@v7.0.1
-        with:
-          fetch-depth: 1
-
-      - name: Generate build matrix
-        id: set-matrix
-        env:
-          KERNEL_VERSION: ${{ github.event.inputs.KERNEL_VERSION }}
-          BUILD_VANILLA: ${{ github.event.inputs.BUILD_VANILLA }}
-          BUILD_KSU: ${{ github.event.inputs.BUILD_KSU }}
-          BUILD_KSU_SUSFS: ${{ github.event.inputs.BUILD_KSU_SUSFS }}
-        run: |
-          python3 py/generate-matrix.py >> "$GITHUB_OUTPUT"
-
   build:
-    needs: prepare
+    needs:
+      - prepare
+      - ensure-cache-release
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -142,7 +144,7 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libdw-dev ccache gh bc bison flex libssl-dev libelf-dev dwarves cpio zip
+          sudo apt-get install -y libdw-dev ccache gh bc bison flex libssl-dev libelf-dev cmake zlib1g-dev cpio zip
           pip install lxml
 
       - name: Restore ccache from release
@@ -187,7 +189,7 @@ jobs:
           echo "::group::[*] Repacking and Signing Boot Image"
           mkdir -p repack/extracted
           mkdir -p repack/output
-          
+
           git clone -q --depth=1 https://android.googlesource.com/platform/system/tools/mkbootimg repack/mkbootimg_tool
           git clone -q --depth=1 https://android.googlesource.com/platform/external/avb repack/avb_tool
 
@@ -280,7 +282,7 @@ jobs:
         if: always()
         run: |
           cat > build-env-${{ matrix.name }}.txt << EOF
-          RELEASE_REPO=${{ env.RELEASE_REPO }}
+          RELEASE_REPO=${{ github.repository }}
           KERNEL_NAME=${{ env.KERNEL_NAME }}
           RELEASE_NAME=${{ env.RELEASE_NAME }}
           RELEASE=${{ env.RELEASE }}
@@ -330,10 +332,11 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Download all artifacts
+      - name: Download all build artifacts
         uses: actions/download-artifact@v4
         with:
           path: downloaded-artifacts
+          pattern: build-*
           merge-multiple: true
 
       - name: Upload combined artifacts
@@ -342,13 +345,14 @@ jobs:
           name: all-builds-${{ github.run_number }}
           retention-days: 7
           path: |
-            downloaded-artifacts/artifacts/*.txt
-            downloaded-artifacts/artifacts/*.zip
-            downloaded-artifacts/artifacts/*.img
+            downloaded-artifacts/*.txt
+            downloaded-artifacts/*.zip
+            downloaded-artifacts/*.img
+            downloaded-artifacts/*.log
 
   release:
     needs: build
-    if: always() && github.event.inputs.TODO != 'defconfig'
+    if: success() && github.event.inputs.TODO != 'defconfig' && github.event.inputs.TEST == 'no'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
@@ -356,17 +360,24 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Download all artifacts
+      - name: Download build and env artifacts
         uses: actions/download-artifact@v4
         with:
           path: release-artifacts
+          pattern: build-*
           merge-multiple: true
 
       - name: Generate Checksums
         run: |
           cd release-artifacts
-          sha256sum *.zip *.img > checksums.txt
-          md5sum *.zip *.img > checksums-md5.txt
+          shopt -s nullglob
+          files=(*.zip *.img)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::No .zip or .img files found to checksum!"
+            exit 1
+          fi
+          sha256sum "${files[@]}" > checksums.txt
+          md5sum "${files[@]}" > checksums-md5.txt
 
       - name: Load environment from builds and prepare release body
         env:
@@ -379,9 +390,13 @@ jobs:
 
       - name: Upload All Builds to release repo
         uses: softprops/action-gh-release@v3.0.2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         with:
+          repository: ${{ github.repository }}
           name: ${{ env.RELEASE_NAME }}
           tag_name: ${{ env.RELEASE }}
+          body_path: release-body.md
           prerelease: true
           files: |
             release-artifacts/*.zip

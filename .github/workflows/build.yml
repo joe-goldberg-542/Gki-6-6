@@ -84,7 +84,7 @@ env:
 
 jobs:
   prepare:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
 
@@ -107,7 +107,7 @@ jobs:
   ensure-cache-release:
     name: Ensure ccache release exists
     needs: prepare
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Create persistent cache release if missing
         env:
@@ -130,7 +130,7 @@ jobs:
     needs:
       - prepare
       - ensure-cache-release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
@@ -330,7 +330,7 @@ jobs:
   upload-all:
     needs: build
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
@@ -353,7 +353,7 @@ jobs:
   release:
     needs: build
     if: success() && github.event.inputs.TODO != 'defconfig' && github.event.inputs.TEST == 'no'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout source
         uses: actions/checkout@v7.0.1

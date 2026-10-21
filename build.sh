@@ -120,7 +120,6 @@ CLANG_BIN="$WORKDIR/neutron-clang/bin"
 mkdir -p "$WORKDIR/neutron-clang"
 cd "$WORKDIR/neutron-clang"
 bash <(curl -s "https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman") -S
-bash <(curl -s "https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman") --patch=glibc
 cd "$WORKDIR"
 if [ ! -d "$CLANG_BIN" ]; then
   error "Clang not found in ${CLANG_BIN}."
@@ -163,6 +162,12 @@ if ! kernel_version_eq "$KERNEL_VERSION" "6.1"; then
   apply_force_load_module_patch
   # apply_extract_cert_key_pass_patch
   cleanup_abi_gki_protected_exports
+fi
+
+# Fix libbpf.c C23 const strchr error on Ubuntu 26.04 (glibc 2.43)
+if [ -f "tools/lib/bpf/libbpf.c" ]; then
+  sed -i 's/next_path = strchr(s, '\'':'\'');/next_path = (char *)strchr(s, '\'':'\'');/g' tools/lib/bpf/libbpf.c
+  success "Patched tools/lib/bpf/libbpf.c for glibc 2.43 C23 strchr compatibility"
 fi
 
 if [ "$KSU" = "BSU" ]; then
@@ -288,6 +293,7 @@ export KBUILD_BUILD_USER="$USER"
 export KBUILD_BUILD_HOST="$HOST"
 export KBUILD_BUILD_TIMESTAMP=$(git -C "$KSRC" log -1 --format=%cd --date=format-local:'%a %b %d %T %z %Y')
 export KCFLAGS="-w"
+export HOSTCFLAGS="-Wno-error -Wno-incompatible-pointer-types-discards-qualifiers"
 
 LINK_CACHE_PATH="/dev/shm/thinlto-cache"
 LINKER_SHIM="$WORKDIR/clang-lto-linker"
@@ -297,6 +303,8 @@ MAKE_ARGS=(
   ARCH=arm64
   CROSS_COMPILE=aarch64-linux-gnu-
   CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+  HOSTCFLAGS="-Wno-error -Wno-incompatible-pointer-types-discards-qualifiers"
+  EXTRA_CFLAGS="-Wno-error -Wno-incompatible-pointer-types-discards-qualifiers"
   -j"$(nproc --all)"
   O="$OUTDIR"
 )

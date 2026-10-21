@@ -3,9 +3,9 @@
 WORKDIR="$(pwd)"
 RELEASE_DIR="$WORKDIR/artifacts"
 
-KERNEL_NAME="GKID"
-USER="ahmed-alnassif"
-HOST="GKID"
+KERNEL_NAME="sky"
+USER=""
+HOST="sky"
 TIMEZONE="Asia/Damascus"
 ANYKERNEL_REPO="https://github.com/ahmed-alnassif/AK3-GKID"
 
@@ -274,13 +274,13 @@ if [ "$NM" = "true" ]; then
   config --enable CONFIG_NOMOUNT
 fi
 
-if [ "${TODO:-kernel}" = "kernel" ]; then
-  LATEST_COMMIT_HASH=$(git rev-parse --short HEAD)
-  SUFFIX="${RUN_NUM}-${LATEST_COMMIT_HASH}"
-  config --set-str CONFIG_LOCALVERSION "-${KERNEL_NAME}${SUFFIX}"
-  config --disable CONFIG_LOCALVERSION_AUTO
-  sed -i 's/echo "+"/# echo "+"/g' scripts/setlocalversion
-fi
+# if [ "${TODO:-kernel}" = "kernel" ]; then
+#   LATEST_COMMIT_HASH=$(git rev-parse --short HEAD)
+#   SUFFIX="${RUN_NUM}-${LATEST_COMMIT_HASH}"
+#   config --set-str CONFIG_LOCALVERSION "-${KERNEL_NAME}${SUFFIX}"
+#   config --disable CONFIG_LOCALVERSION_AUTO
+#   sed -i 's/echo "+"/# echo "+"/g' scripts/setlocalversion
+# fi
 
 export KBUILD_BUILD_USER="$USER"
 export KBUILD_BUILD_HOST="$HOST"

@@ -181,8 +181,7 @@ jobs:
       - name: Repack and Sign Boot Image
         if: github.event.inputs.TODO != 'defconfig' && github.event.inputs.TEST == 'no'
         env:
-          # ⚠️ Apne device ke stock boot.img ka direct link yahan daalein
-          BOOT_IMG_URL: "https://www.dropbox.com/scl/fi/16oax1feqzx2z9spqkudy/Shinkaiboot.img?rlkey=3fuh9bgja0djrsmutg2rvqo6a&st=cw6rafsz&dl=1"
+          BOOT_IMG_URL: "https://www.dropbox.com/scl/fi/lz88o798gu5ae9tolprfu/Aospaboot.img?rlkey=lz4jq3olbv7riqrvixd0qq0w3&st=7ear88p0&dl=1"
         shell: bash
         run: |
           echo "::group::[*] Repacking and Signing Boot Image"
@@ -261,13 +260,7 @@ jobs:
             --algorithm SHA256_RSA2048
 
           BOOT_IMG_NAME="GKID-${VARIANT}-${RELEASE}-${LINUX_VERSION}-boot.img"
-          BOOT_ZIP_NAME="GKID-${VARIANT}-${RELEASE}-${LINUX_VERSION}-boot.zip"
-
           cp repack/output/boot.img "artifacts/$BOOT_IMG_NAME"
-          
-          cd artifacts
-          zip -q "$BOOT_ZIP_NAME" "$BOOT_IMG_NAME"
-          cd "$GITHUB_WORKSPACE"
           echo "::endgroup::"
 
       - name: ccache stats
@@ -351,6 +344,7 @@ jobs:
           path: |
             downloaded-artifacts/artifacts/*.txt
             downloaded-artifacts/artifacts/*.zip
+            downloaded-artifacts/artifacts/*.img
 
   release:
     needs: build
@@ -371,8 +365,8 @@ jobs:
       - name: Generate Checksums
         run: |
           cd release-artifacts
-          sha256sum *.zip > checksums.txt
-          md5sum *.zip > checksums-md5.txt
+          sha256sum *.zip *.img > checksums.txt
+          md5sum *.zip *.img > checksums-md5.txt
 
       - name: Load environment from builds and prepare release body
         env:
@@ -391,6 +385,7 @@ jobs:
           prerelease: true
           files: |
             release-artifacts/*.zip
+            release-artifacts/*.img
             release-artifacts/checksums.txt
             release-artifacts/checksums-md5.txt
           body_path: release_body.md

@@ -274,13 +274,12 @@ if [ "$NM" = "true" ]; then
   config --enable CONFIG_NOMOUNT
 fi
 
-# if [ "${TODO:-kernel}" = "kernel" ]; then
-#   LATEST_COMMIT_HASH=$(git rev-parse --short HEAD)
-#   SUFFIX="${RUN_NUM}-${LATEST_COMMIT_HASH}"
-#   config --set-str CONFIG_LOCALVERSION "-${KERNEL_NAME}${SUFFIX}"
-#   config --disable CONFIG_LOCALVERSION_AUTO
-#   sed -i 's/echo "+"/# echo "+"/g' scripts/setlocalversion
-# fi
+if [ "${TODO:-kernel}" = "kernel" ]; then
+  LATEST_COMMIT_HASH=$(git rev-parse --short HEAD)
+  config --set-str CONFIG_LOCALVERSION "-android15-11-g${LATEST_COMMIT_HASH}"
+  config --disable CONFIG_LOCALVERSION_AUTO
+  sed -i 's/echo "+"/# echo "+"/g' scripts/setlocalversion
+fi
 
 export KBUILD_BUILD_USER="$USER"
 export KBUILD_BUILD_HOST="$HOST"

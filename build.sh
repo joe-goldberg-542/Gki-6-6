@@ -439,12 +439,12 @@ if [ -f /mnt/swapfile ]; then
     sudo rm -f /mnt/swapfile
 fi
 
-warning "Creating 32GB swap"
-sudo fallocate -l 32G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=32768 status=none
+warning "Creating 15GB swap"
+sudo fallocate -l 15G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=15360 status=none
 sudo chmod 600 /swapfile
 sudo mkswap /swapfile
 sudo swapon /swapfile
-success "32GB swap created and activated"
+success "15GB swap created and activated"
 
 sudo sysctl -w vm.swappiness=90
 sudo sysctl -w vm.vfs_cache_pressure=200

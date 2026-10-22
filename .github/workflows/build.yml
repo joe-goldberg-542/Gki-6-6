@@ -24,12 +24,12 @@ on:
 
       LTO:
         description: enable LTO optimization
-        default: "fullLTO"
+        default: "full"
         type: choice
         options:
-          - "noneLTO"
-          - "thinLTO"
-          - "fullLTO"
+          - "none"
+          - "thin"
+          - "full"
 
       KERNEL_VERSION:
         description: "GKI LTS kernel line to build"
@@ -37,9 +37,6 @@ on:
         type: choice
         options:
           - "All"
-          - "5.10"
-          - "5.15"
-          - "6.1"
           - "6.6"
           - "6.12"
 
@@ -159,7 +156,6 @@ jobs:
       - name: Run Build Script
         env:
           GH_TOKEN: ${{ github.token }}
-          KERNEL_REPO: https://github.com/ahmed-alnassif/GKI-Duchamp-6.1
           KERNEL_VERSION: ${{ matrix.kernel_version }}
           KSU: ${{ matrix.KSU }}
           KSU_COMPAT: ${{ matrix.KSU_COMPAT }}

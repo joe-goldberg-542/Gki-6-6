@@ -29,15 +29,7 @@ PATCHES_DIR="$WORKDIR/patches"
 
 source "$WORKDIR/functions.sh"
 
-if kernel_version_eq "$KERNEL_VERSION" "6.1"; then
-  if [ "$NH" = "true" ]; then
-    KERNEL_BRANCH="GKID-NH"
-  else
-    KERNEL_BRANCH="GKID-6.1"
-  fi
-else
-  IFS='|' read -r KERNEL_REPO KERNEL_BRANCH KERNEL_KMI <<< "$(resolve_kernel_source "$KERNEL_VERSION")"
-fi
+IFS='|' read -r KERNEL_REPO KERNEL_BRANCH KERNEL_KMI <<< "$(resolve_kernel_source "$KERNEL_VERSION")"
 
 ANDROID_RELEASE="$(android_release_for_version "$KERNEL_VERSION")"
 echo "KERNEL_VERSION=$KERNEL_VERSION" >> "$GITHUB_ENV"
@@ -59,11 +51,7 @@ trap 'echo "[-] Received SIGTERM at $(date) - possible GitHub kill" >> "$BUILD_L
 trap 'echo "[-] Received SIGINT at $(date)" >> "$BUILD_LOGS"' INT
 
 log "Cloning kernel source from $(simplify_gh_url "$KERNEL_REPO")"
-if kernel_version_eq "$KERNEL_VERSION" "6.1"; then
-  git clone -q --depth=1 --recurse-submodules "$KERNEL_REPO" -b "$KERNEL_BRANCH" "$KSRC"
-else
-  git clone -q --depth=1 "$KERNEL_REPO" -b "$KERNEL_BRANCH" "$KSRC"
-fi
+git clone -q --depth=1 "$KERNEL_REPO" -b "$KERNEL_BRANCH" "$KSRC"
 
 cd "$KSRC"
 LINUX_VERSION=$(make kernelversion)
@@ -87,13 +75,8 @@ SUSFS_URL="https://gitlab.com/simonpunk/susfs4ksu"
 SUSFS_DIR="$WORKDIR/susfs"
 SUSFS_PATCHES="${SUSFS_DIR}/kernel_patches"
 
-if kernel_version_eq "$KERNEL_VERSION" "6.1"; then
-  SUSFS_BRANCH="gki-android14-6.1"
-  SUSFS_PATCH="gki-android14-6.1"
-else
-  SUSFS_BRANCH="$(resolve_susfs_branch "$KERNEL_VERSION")"
-  SUSFS_PATCH="$SUSFS_BRANCH"
-fi
+SUSFS_BRANCH="$(resolve_susfs_branch "$KERNEL_VERSION")"
+SUSFS_PATCH="$SUSFS_BRANCH"
 
 log "Changelog of repos"
 clone_susfs 5
@@ -102,14 +85,13 @@ git log --pretty=format:"- [%h](https://${SUSFS_URL#https://}/commit/%H) %s" -5 
   > "$RELEASE_DIR/susfs_changelog-${KERNEL_VERSION}.txt"
 cd "$WORKDIR"
 
-if kernel_version_eq "$KERNEL_VERSION" "6.1"; then
-  generate_gh_changelog "ahmed-alnassif/GKI-Duchamp-6.1" "$KERNEL_BRANCH" 10 "$RELEASE_DIR/android_kernel-6.1_changelog.txt"
-elif kernel_version_eq "$KERNEL_VERSION" "6.6"; then
+if kernel_version_eq "$KERNEL_VERSION" "6.6"; then
   generate_gh_changelog "xiaomi-ravelin/android_kernel_xiaomi_sm4450" "$KERNEL_BRANCH" 10 "$RELEASE_DIR/android_kernel-6.6_changelog.txt"
 else
   echo "No changelog generator wired up yet for $KERNEL_VERSION" \
     > "$RELEASE_DIR/android_kernel-${KERNEL_VERSION}_changelog.txt"
 fi
+
 generate_gh_changelog "maxsteeel/nomount" "dev" 5 "$RELEASE_DIR/nomount_changelog.txt"
 generate_gh_changelog "tiann/KernelSU" "main" 5 "$RELEASE_DIR/ksu_changelog.txt"
 generate_gh_changelog "Baka-SU/BakaSU" "sync-susfs" 5 "$RELEASE_DIR/BakaSU_changelog.txt"
@@ -156,10 +138,8 @@ echo "::group::[+] Applied patches"
 export DROIDSPACES="false"
 export NH="false"
 
-if ! kernel_version_eq "$KERNEL_VERSION" "6.1"; then
-  apply_force_load_module_patch
-  cleanup_abi_gki_protected_exports
-fi
+apply_force_load_module_patch
+cleanup_abi_gki_protected_exports
 
 if [ -f "tools/lib/bpf/libbpf.c" ]; then
   sed -i 's/next_path = strchr(s, '\'':'\'');/next_path = (char *)strchr(s, '\'':'\'');/g' tools/lib/bpf/libbpf.c
@@ -315,12 +295,12 @@ MAKE_ARGS=(
   O="$OUTDIR"
 )
 
-if [ "${LTO:-}" = "thinLTO" ] && [ "$CLEAN_LTO_CACHE" = "true" ]; then
+if [ "${LTO:-full}" = "thin" ] && [ "$CLEAN_LTO_CACHE" = "true" ]; then
   rm -rf "$LINK_CACHE_PATH"
   success "ThinLTO cache removed"
 fi
 
-if [ "${LTO:-}" = "thinLTO" ]; then
+if [ "${LTO:-full}" = "thin" ]; then
   log "ThinLTO cache enabled"
   mkdir -p "$LINK_CACHE_PATH"
   cat > "$LINKER_SHIM" << SHIM
@@ -343,6 +323,24 @@ if kernel_version_eq "$KERNEL_VERSION" "6.6" && [ -f "arch/arm64/configs/vendor/
 else
   make "${MAKE_ARGS[@]}" "$KERNEL_DEFCONFIG"
 fi
+
+# =======================
+# LTO ENABLER OVERRIDE FIX
+# =======================
+log "Injecting LTO Method: ${LTO:-full}"
+if [ "${LTO:-full}" = "full" ]; then
+  ./scripts/config --file "$OUTDIR/.config" -d LTO_CLANG_THIN -e LTO_CLANG_FULL
+  MAKE_ARGS+=(LTO=full)
+elif [ "${LTO:-full}" = "thin" ]; then
+  ./scripts/config --file "$OUTDIR/.config" -e LTO_CLANG_THIN -d LTO_CLANG_FULL
+  MAKE_ARGS+=(LTO=thin)
+elif [ "${LTO:-full}" = "none" ]; then
+  ./scripts/config --file "$OUTDIR/.config" -d LTO_CLANG_THIN -d LTO_CLANG_FULL -e LTO_NONE
+  MAKE_ARGS+=(LTO=none)
+fi
+# Re-sync modified .config back to compilation phase variables
+make "${MAKE_ARGS[@]}" olddefconfig > /dev/null
+
 echo "::endgroup::"
 
 if susfs_included; then
@@ -389,7 +387,7 @@ if [ -f /mnt/swapfile ]; then
   sudo rm -f /mnt/swapfile
 fi
 
-warning "Creating 15GB swap"
+warning "Creating 15GB swap for Heavy Link-Time Optimization (Full LTO)"
 sudo fallocate -l 15G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=15360 status=none
 sudo chmod 600 /swapfile
 sudo mkswap /swapfile

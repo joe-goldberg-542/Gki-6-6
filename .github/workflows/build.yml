@@ -311,7 +311,7 @@ jobs:
 
       - name: Upload environment file
         if: always()
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: build-env-${{ matrix.name }}-${{ github.run_number }}
           path: |
@@ -321,7 +321,7 @@ jobs:
 
       - name: Upload build artifacts
         if: always()
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: build-${{ matrix.name }}-${{ github.run_number }}
           path: artifacts/
@@ -333,14 +333,14 @@ jobs:
     runs-on: ubuntu-26.04
     steps:
       - name: Download all build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8.0.2
         with:
           path: downloaded-artifacts
           pattern: build-*
           merge-multiple: true
 
       - name: Upload combined artifacts
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: all-builds-${{ github.run_number }}
           retention-days: 7
@@ -361,7 +361,7 @@ jobs:
           fetch-depth: 1
 
       - name: Download build and env artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8.0.2
         with:
           path: release-artifacts
           pattern: build-*
@@ -389,7 +389,7 @@ jobs:
         run: python3 .github/scripts/prepare_release.py
 
       - name: Upload All Builds to release repo
-        uses: softprops/action-gh-release@v3.0.2
+        uses: softprops/action-gh-release@v3.0.3
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:

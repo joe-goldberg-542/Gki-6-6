@@ -112,7 +112,6 @@ else
 fi
 generate_gh_changelog "maxsteeel/nomount" "dev" 5 "$RELEASE_DIR/nomount_changelog.txt"
 generate_gh_changelog "tiann/KernelSU" "main" 5 "$RELEASE_DIR/ksu_changelog.txt"
-# Updated BakaSU branch to sync-susfs
 generate_gh_changelog "Baka-SU/BakaSU" "sync-susfs" 5 "$RELEASE_DIR/BakaSU_changelog.txt"
 
 echo "::group::[*] Downloading Clang"
@@ -154,25 +153,34 @@ echo "::endgroup::"
 
 echo "::group::[+] Applied patches"
 
-# Disable DroidSpaces & NetHunter completely as requested
 export DROIDSPACES="false"
 export NH="false"
 
 if ! kernel_version_eq "$KERNEL_VERSION" "6.1"; then
   apply_force_load_module_patch
-  # apply_extract_cert_key_pass_patch
   cleanup_abi_gki_protected_exports
 fi
 
-# Fix libbpf.c C23 const strchr error on Ubuntu 26.04 (glibc 2.43)
 if [ -f "tools/lib/bpf/libbpf.c" ]; then
   sed -i 's/next_path = strchr(s, '\'':'\'');/next_path = (char *)strchr(s, '\'':'\'');/g' tools/lib/bpf/libbpf.c
   success "Patched tools/lib/bpf/libbpf.c for glibc 2.43 C23 strchr compatibility"
 fi
 
+if [ -d "kernel/sched/walt" ]; then
+  log "Patching WALT governor (Retaining App Launch Boost)"
+  sed -i 's/queue_work(input_boost_wq, &input_boost_work);/\/\* killed schedutil-style \*\//g' kernel/sched/walt/input-boost.c
+  sed -i 's/if (wg_policy->tunables->pl)/if (0)/g' kernel/sched/walt/cpufreq_walt.c
+  sed -i 's/#define DEFAULT_HISPEED_LOAD 90/#define DEFAULT_HISPEED_LOAD 105/g' kernel/sched/walt/cpufreq_walt.c
+  sed -i 's/if (wrq->ed_task)/if (0)/g' kernel/sched/walt/walt.c
+  sed -i 's/if (should_apply_suh_freq_boost(cluster))/if (0)/g' kernel/sched/walt/walt.c
+  sed -i 's/if (wrq->lrb_pipeline_start_time)/if (0)/g' kernel/sched/walt/walt.c
+  sed -i 's/wtg->sched_boost_enable\[BALANCE_BOOST\] = true/wtg->sched_boost_enable\[BALANCE_BOOST\] = false/g' kernel/sched/walt/boost.c
+  sed -i 's/#define DEFAULT_SILVER_RTG_BOOST_FREQ 1000000/#define DEFAULT_SILVER_RTG_BOOST_FREQ 0/g' kernel/sched/walt/cpufreq_walt.c
+  sed -i 's/#define DEFAULT_GOLD_RTG_BOOST_FREQ 768000/#define DEFAULT_GOLD_RTG_BOOST_FREQ 0/g' kernel/sched/walt/cpufreq_walt.c
+fi
+
 if [ "$KSU" = "BSU" ]; then
   log "BakaSU included"
-  # Updated BakaSU install call to use sync-susfs branch
   install_ksu "Baka-SU/BakaSU" "sync-susfs"
 
   if susfs_included; then
@@ -210,7 +218,6 @@ if [ "$KSU" = "KSU" ]; then
   fi
 fi
 
-# Inject KSU & SELinux Bridge Symbols
 if [ "$KSU" != "no" ] && [ "$KSU" != "vnlto" ] && [ -d "drivers/kernelsu" ]; then
   log "Injecting KSU & SELinux Bridge Symbols"
   cat << 'EOF' > drivers/kernelsu/compat_bridge.c
@@ -277,7 +284,6 @@ AK3_ZIP_NAME=${AK3_ZIP_NAME//VARIANT/$VARIANT}
 log "Applying configs..."
 source "$WORKDIR/configs/gki_defconfig.sh"
 
-# Ensure NoMount config is enabled in defconfig when NM=true
 if [ "$NM" = "true" ]; then
   config --enable CONFIG_NOMOUNT
 fi

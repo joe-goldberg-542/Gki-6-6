@@ -11,8 +11,8 @@ TIMEZONE="Asia/Damascus"
 ANYKERNEL_REPO="https://github.com/ahmed-alnassif/AK3-GKID"
 
 KERNEL_DEFCONFIG="gki_defconfig"
-
-KERNEL_VERSION="${KERNEL_VERSION:-6.6}"
+KERNEL_VERSION="6.6"
+ANDROID_RELEASE="15"
 
 sudo timedatectl set-timezone "$TIMEZONE" || export TZ="$TIMEZONE"
 
@@ -29,9 +29,8 @@ PATCHES_DIR="$WORKDIR/patches"
 
 source "$WORKDIR/functions.sh"
 
-IFS='|' read -r KERNEL_REPO KERNEL_BRANCH KERNEL_KMI <<< "$(resolve_kernel_source "$KERNEL_VERSION")"
+IFS='|' read -r KERNEL_REPO KERNEL_BRANCH KERNEL_KMI <<< "$(resolve_kernel_source)"
 
-ANDROID_RELEASE="$(android_release_for_version "$KERNEL_VERSION")"
 echo "KERNEL_VERSION=$KERNEL_VERSION" >> "$GITHUB_ENV"
 echo "ANDROID_RELEASE=$ANDROID_RELEASE" >> "$GITHUB_ENV"
 echo "KERNEL_SOURCE_REPO=$(simplify_gh_url "$KERNEL_REPO")" >> "$GITHUB_ENV"
@@ -75,7 +74,7 @@ SUSFS_URL="https://gitlab.com/simonpunk/susfs4ksu"
 SUSFS_DIR="$WORKDIR/susfs"
 SUSFS_PATCHES="${SUSFS_DIR}/kernel_patches"
 
-SUSFS_BRANCH="$(resolve_susfs_branch "$KERNEL_VERSION")"
+SUSFS_BRANCH="$(resolve_susfs_branch)"
 SUSFS_PATCH="$SUSFS_BRANCH"
 
 log "Changelog of repos"
@@ -85,13 +84,7 @@ git log --pretty=format:"- [%h](https://${SUSFS_URL#https://}/commit/%H) %s" -5 
   > "$RELEASE_DIR/susfs_changelog-${KERNEL_VERSION}.txt"
 cd "$WORKDIR"
 
-if kernel_version_eq "$KERNEL_VERSION" "6.6"; then
-  generate_gh_changelog "xiaomi-ravelin/android_kernel_xiaomi_sm4450" "$KERNEL_BRANCH" 10 "$RELEASE_DIR/android_kernel-6.6_changelog.txt"
-else
-  echo "No changelog generator wired up yet for $KERNEL_VERSION" \
-    > "$RELEASE_DIR/android_kernel-${KERNEL_VERSION}_changelog.txt"
-fi
-
+generate_gh_changelog "xiaomi-ravelin/android_kernel_xiaomi_sm4450" "$KERNEL_BRANCH" 10 "$RELEASE_DIR/android_kernel-6.6_changelog.txt"
 generate_gh_changelog "maxsteeel/nomount" "dev" 5 "$RELEASE_DIR/nomount_changelog.txt"
 generate_gh_changelog "tiann/KernelSU" "main" 5 "$RELEASE_DIR/ksu_changelog.txt"
 generate_gh_changelog "Baka-SU/BakaSU" "sync-susfs" 5 "$RELEASE_DIR/BakaSU_changelog.txt"
@@ -110,24 +103,8 @@ fi
 export PATH="${CLANG_BIN}:$PATH"
 echo "::endgroup::"
 
-export CCACHE_DIR="$HOME/.ccache"
-export CCACHE_BASEDIR="$WORKDIR"
-export CCACHE_NOHARDLINK=true
-export CCACHE_COMPILERCHECK=content
-export CC="ccache clang"
-export CXX="ccache clang++"
-
-ccache --zero-stats
-ccache --max-size=5G
-ccache --set-config=sloppiness="pch_defines,time_macros,file_macro,include_file_mtime,include_file_ctime"
-ccache --set-config=hash_dir=false
-ccache --set-config=base_dir="$WORKDIR"
-ccache --set-config=compiler_check=content
-
-if [ "${CLEAN_BUILD:-false}" = "true" ]; then
-  log "Force Scratch Build! Clearing old ccache completely..."
-  ccache --clear
-fi
+export CC="clang"
+export CXX="clang++"
 
 COMPILER_STRING=$(clang -v 2>&1 | head -n 1 | sed 's/(https..*//' | sed 's/ version//')
 echo "COMPILER_STRING=$COMPILER_STRING" >> "$GITHUB_ENV"
@@ -143,26 +120,7 @@ echo "::group::[+] Applied patches"
 export DROIDSPACES="false"
 export NH="false"
 
-apply_force_load_module_patch
 cleanup_abi_gki_protected_exports
-
-if [ -f "tools/lib/bpf/libbpf.c" ]; then
-  sed -i 's/next_path = strchr(s, '\'':'\'');/next_path = (char *)strchr(s, '\'':'\'');/g' tools/lib/bpf/libbpf.c
-  success "Patched tools/lib/bpf/libbpf.c for glibc 2.43 C23 strchr compatibility"
-fi
-
-if [ -d "kernel/sched/walt" ]; then
-  log "Patching WALT governor (Retaining App Launch Boost)"
-  sed -i 's/queue_work(input_boost_wq, &input_boost_work);/\/\* killed schedutil-style \*\//g' kernel/sched/walt/input-boost.c
-  sed -i 's/if (wg_policy->tunables->pl)/if (0)/g' kernel/sched/walt/cpufreq_walt.c
-  sed -i 's/#define DEFAULT_HISPEED_LOAD 90/#define DEFAULT_HISPEED_LOAD 105/g' kernel/sched/walt/cpufreq_walt.c
-  sed -i 's/if (wrq->ed_task)/if (0)/g' kernel/sched/walt/walt.c
-  sed -i 's/if (should_apply_suh_freq_boost(cluster))/if (0)/g' kernel/sched/walt/walt.c
-  sed -i 's/if (wrq->lrb_pipeline_start_time)/if (0)/g' kernel/sched/walt/walt.c
-  sed -i 's/wtg->sched_boost_enable\[BALANCE_BOOST\] = true/wtg->sched_boost_enable\[BALANCE_BOOST\] = false/g' kernel/sched/walt/boost.c
-  sed -i 's/#define DEFAULT_SILVER_RTG_BOOST_FREQ 1000000/#define DEFAULT_SILVER_RTG_BOOST_FREQ 0/g' kernel/sched/walt/cpufreq_walt.c
-  sed -i 's/#define DEFAULT_GOLD_RTG_BOOST_FREQ 768000/#define DEFAULT_GOLD_RTG_BOOST_FREQ 0/g' kernel/sched/walt/cpufreq_walt.c
-fi
 
 if [ "$KSU" = "BSU" ]; then
   log "BakaSU included (Merge Multiple Branches)"
@@ -229,85 +187,6 @@ EOF
   fi
 fi
 
-if [ "$KSU" = "KSU" ]; then
-  log "KernelSU included"
-  if ! susfs_included; then
-    install_ksu "tiann/KernelSU" "main"
-  fi
-
-  if susfs_included; then
-    VARIANT+="+Multiple-Managers"
-    git clone "https://github.com/tiann/KernelSU" && echo "[+] Repository cloned."
-    clone_susfs
-
-    cd KernelSU
-    git reset --soft HEAD~1
-    apply_patch_file "$PATCHES_DIR/0001-feat-avc-log-spoofing.patch"
-    apply_patch_file "$SUSFS_PATCHES/KernelSU/10_enable_susfs_for_ksu.patch"
-    apply_patch_file "$PATCHES_DIR/0001-feat-escape-persistent_allow_list-to-kthread.patch"
-    apply_patch_file "$PATCHES_DIR/0001-feat-supercalls-allow-userspace-to-pull-list-entries.patch"
-    sed -i "/    git pull && echo \"\[+\] Repository updated.\"/d" "kernel/setup.sh"
-    git config --global user.email "mr.ahmed.nassif@gmail.com"
-    git config --global user.name "Ahmed Al-Nassif"
-    git add .
-    git commit -m "susfs patch"
-    cd ..
-    bash "KernelSU/kernel/setup.sh" "main"
-
-    apply_susfs_patches
-  fi
-fi
-
-if [ "$KSU" != "no" ] && [ "$KSU" != "vnlto" ] && [ -d "drivers/kernelsu" ]; then
-  log "Injecting KSU & SELinux Bridge Symbols"
-  cat << 'EOF' > drivers/kernelsu/compat_bridge.c
-#include <linux/types.h>
-#include <linux/fs.h>
-#include <linux/file.h>
-#include <linux/sched.h>
-#include <linux/uaccess.h>
-#include <linux/slab.h>
-
-bool ksu_setup_preinit_file(struct file *file)
-{
-    return false;
-}
-
-void ksu_preinit_handle_post_execveat(int fd, struct filename *filename, void *argv, void *envp, int flags)
-{
-}
-
-int my_setprocattr(const char *name, void *value, size_t size)
-{
-    return 1;
-}
-
-ssize_t my_write_context(struct file *file, const char __user *buf, size_t size, loff_t *ppos)
-{
-    return 0;
-}
-
-ssize_t my_write_access(struct file *file, const char __user *buf, size_t size, loff_t *ppos)
-{
-    return 0;
-}
-EOF
-
-  if [ -f "drivers/kernelsu/Kbuild" ]; then
-    echo "obj-y += compat_bridge.o" >> drivers/kernelsu/Kbuild
-  elif [ -f "drivers/kernelsu/Makefile" ]; then
-    echo "obj-y += compat_bridge.o" >> drivers/kernelsu/Makefile
-  fi
-  
-  log "Committing compat_bridge changes to clear KSU dirty version"
-  cd drivers/kernelsu
-  git config user.email "build@dummy.com" || true
-  git config user.name "Dummy Builder" || true
-  git add compat_bridge.c Kbuild Makefile 2>/dev/null || true
-  git commit -m "inject: KSU & SELinux Bridge Symbols" || true
-  cd ../../
-fi
-
 if [ "$NM" = "true" ]; then
   log "Applying NoMount (dev)"
   curl -LSs "https://raw.githubusercontent.com/maxsteeel/nomount/refs/heads/dev/kernel/setup.sh" | bash -s dev
@@ -341,7 +220,6 @@ export KBUILD_BUILD_TIMESTAMP=$(git -C "$KSRC" log -1 --format=%cd --date=format
 export KCFLAGS="-w"
 export HOSTCFLAGS="-Wno-error -Wno-incompatible-pointer-types-discards-qualifiers"
 
-LINK_CACHE_PATH="/dev/shm/thinlto-cache"
 LINKER_SHIM="$WORKDIR/clang-lto-linker"
 MAKE_ARGS=(
   LLVM=1
@@ -355,18 +233,12 @@ MAKE_ARGS=(
   O="$OUTDIR"
 )
 
-if [ "${LTO:-full}" = "thin" ] && [ "$CLEAN_LTO_CACHE" = "true" ]; then
-  rm -rf "$LINK_CACHE_PATH"
-  success "ThinLTO cache removed"
-fi
-
 if [ "${LTO:-full}" = "thin" ]; then
-  log "ThinLTO cache enabled"
-  mkdir -p "$LINK_CACHE_PATH"
+  log "ThinLTO enabled (Cache removed)"
   cat > "$LINKER_SHIM" << SHIM
 #!/usr/bin/env bash
 JOBCOUNT=\$(( \$(nproc --all) / 2 ))
-exec ld.lld "\$@" --thinlto-cache-dir="$LINK_CACHE_PATH" --thinlto-jobs=\$JOBCOUNT
+exec ld.lld "\$@" --thinlto-jobs=\$JOBCOUNT
 SHIM
   chmod +x "$LINKER_SHIM"
   MAKE_ARGS+=(LD="$LINKER_SHIM" HOSTLD="$LINKER_SHIM")
@@ -374,19 +246,15 @@ fi
 
 KERNEL_IMAGE="$OUTDIR/arch/arm64/boot/Image"
 MODULE_SYMVERS="$OUTDIR/Module.symvers"
-KMI_CHECK="$WORKDIR/py/kmi-check-6.x.py"
 
 echo "::group::[*] Generating config"
-if kernel_version_eq "$KERNEL_VERSION" "6.6" && [ -f "arch/arm64/configs/vendor/parrot_perf.config" ]; then
+if [ -f "arch/arm64/configs/vendor/parrot_perf.config" ]; then
   log "Merging gki_defconfig + vendor/parrot_perf.config for POCO M6 Pro 5G (Sky)"
   make "${MAKE_ARGS[@]}" "$KERNEL_DEFCONFIG" vendor/parrot_perf.config
 else
   make "${MAKE_ARGS[@]}" "$KERNEL_DEFCONFIG"
 fi
 
-# =======================
-# LTO ENABLER OVERRIDE FIX
-# =======================
 log "Injecting LTO Method: ${LTO:-full}"
 if [ "${LTO:-full}" = "full" ]; then
   ./scripts/config --file "$OUTDIR/.config" -d LTO_CLANG_THIN -e LTO_CLANG_FULL
@@ -465,7 +333,7 @@ echo "::endgroup::"
 
 set -eo pipefail
 echo "::group::[*] Building kernel"
-make "${MAKE_ARGS[@]}" CC="ccache clang" CXX="ccache clang++"
+make "${MAKE_ARGS[@]}" CC="clang" CXX="clang++"
 echo "::endgroup::"
 
 cd "$WORKDIR"

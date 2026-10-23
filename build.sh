@@ -165,9 +165,64 @@ if [ -d "kernel/sched/walt" ]; then
 fi
 
 if [ "$KSU" = "BSU" ]; then
-  log "BakaSU included"
-  install_ksu "Baka-SU/BakaSU" "sync-susfs"
-
+  log "BakaSU included (Merge Multiple Branches)"
+  
+  curl -LSs "https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh" | bash -s main
+  
+  cd KernelSU
+  git config user.email "joe_goldberg_542@protonmail.com"
+  git config user.name "joe-goldberg-542"
+  
+  git fetch origin --prune
+  git checkout main
+  
+  BRANCHES=(
+    "sync-susfs"
+    "sync-upstream"
+    "renovate/maven-group-in-manager"
+    "renovate/gradle-9.x"
+  )
+  
+  for branch in "${BRANCHES[@]}"; do
+    echo "=========================================="
+    log "Merging origin/$branch into main..."
+    ACTUAL_BRANCH=$(git branch -r | grep -i "origin/$branch$" | sed 's/origin\///' | tr -d ' ' | head -n 1)
+    
+    if [ -n "$ACTUAL_BRANCH" ]; then
+      if git merge --no-edit "origin/$ACTUAL_BRANCH"; then
+        success "Successfully merged $ACTUAL_BRANCH"
+      elif git merge --no-edit -X theirs "origin/$ACTUAL_BRANCH"; then
+        warning "Merged $ACTUAL_BRANCH using auto-conflict resolution (-X theirs)"
+      else
+        error "Conflict in $ACTUAL_BRANCH could not be auto-resolved, skipping..."
+        git merge --abort || true
+      fi
+    else
+      warning "Branch $branch not found on remote!"
+    fi
+  done
+  
+  cd ..
+  
+  log "Injecting KSU SUSFS Configuration to gki_defconfig"
+  cat << 'EOF' >> arch/arm64/configs/gki_defconfig
+CONFIG_KSU=y
+CONFIG_KSU_SENTINEL=y
+CONFIG_KSU_SUSFS=y
+CONFIG_KSU_SUSFS_SUS_PATH=y
+CONFIG_KSU_SUSFS_SUS_MOUNT=y
+CONFIG_KSU_SUSFS_SUS_KSTAT=y
+CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+CONFIG_KSU_SUSFS_ENABLE_LOG=n
+CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
+CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+CONFIG_KSU_SUSFS_SUS_MAP=y
+CONFIG_KSU_INLINE_HOOK=y
+CONFIG_KSU_SUSFS_SUS_MEMFD=y
+CONFIG_KSU_SUSFS_SUS_PROC_FD_LINK=y
+EOF
+  
   if susfs_included; then
     clone_susfs
     apply_susfs_patches
@@ -200,48 +255,6 @@ if [ "$KSU" = "KSU" ]; then
     bash "KernelSU/kernel/setup.sh" "main"
 
     apply_susfs_patches
-  fi
-fi
-
-if [ "$KSU" != "no" ] && [ "$KSU" != "vnlto" ] && [ -d "drivers/kernelsu" ]; then
-  log "Injecting KSU & SELinux Bridge Symbols"
-  cat << 'EOF' > drivers/kernelsu/compat_bridge.c
-#include <linux/types.h>
-#include <linux/fs.h>
-#include <linux/file.h>
-#include <linux/sched.h>
-#include <linux/uaccess.h>
-#include <linux/slab.h>
-
-bool ksu_setup_preinit_file(struct file *file)
-{
-    return false;
-}
-
-void ksu_preinit_handle_post_execveat(int fd, struct filename *filename, void *argv, void *envp, int flags)
-{
-}
-
-int my_setprocattr(const char *name, void *value, size_t size)
-{
-    return 1;
-}
-
-ssize_t my_write_context(struct file *file, const char __user *buf, size_t size, loff_t *ppos)
-{
-    return 0;
-}
-
-ssize_t my_write_access(struct file *file, const char __user *buf, size_t size, loff_t *ppos)
-{
-    return 0;
-}
-EOF
-
-  if [ -f "drivers/kernelsu/Kbuild" ]; then
-    echo "obj-y += compat_bridge.o" >> drivers/kernelsu/Kbuild
-  elif [ -f "drivers/kernelsu/Makefile" ]; then
-    echo "obj-y += compat_bridge.o" >> drivers/kernelsu/Makefile
   fi
 fi
 

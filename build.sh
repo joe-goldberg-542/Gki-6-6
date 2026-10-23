@@ -25,7 +25,6 @@ AK3_ZIP_NAME="$KERNEL_NAME-VARIANT-REL-KVER.zip"
 OUTDIR="$WORKDIR/out"
 KSRC="$WORKDIR/ksrc"
 KERNEL_PATCHES="$WORKDIR/kernel-patches"
-PATCHES_DIR="$WORKDIR/patches"
 
 source "$WORKDIR/functions.sh"
 
@@ -162,29 +161,60 @@ if [ "$KSU" = "BSU" ]; then
   
   cd ..
   
-  log "Injecting KSU SUSFS Configuration to gki_defconfig"
-  cat << 'EOF' >> arch/arm64/configs/gki_defconfig
-CONFIG_KSU=y
-CONFIG_KSU_SENTINEL=y
-CONFIG_KSU_SUSFS=y
-CONFIG_KSU_SUSFS_SUS_PATH=y
-CONFIG_KSU_SUSFS_SUS_MOUNT=y
-CONFIG_KSU_SUSFS_SUS_KSTAT=y
-CONFIG_KSU_SUSFS_SPOOF_UNAME=y
-CONFIG_KSU_SUSFS_ENABLE_LOG=n
-CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
-CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
-CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-CONFIG_KSU_SUSFS_SUS_MAP=y
-CONFIG_KSU_INLINE_HOOK=y
-CONFIG_KSU_SUSFS_SUS_MEMFD=y
-CONFIG_KSU_SUSFS_SUS_PROC_FD_LINK=y
-EOF
-  
   if susfs_included; then
     clone_susfs
     apply_susfs_patches
   fi
+fi
+
+if [ "$KSU" != "no" ] && [ -d "drivers/kernelsu" ]; then
+  log "Injecting KSU & SELinux Bridge Symbols"
+  cat << 'EOF' > drivers/kernelsu/compat_bridge.c
+#include <linux/types.h>
+#include <linux/fs.h>
+#include <linux/file.h>
+#include <linux/sched.h>
+#include <linux/uaccess.h>
+#include <linux/slab.h>
+
+bool ksu_setup_preinit_file(struct file *file)
+{
+    return false;
+}
+
+void ksu_preinit_handle_post_execveat(int fd, struct filename *filename, void *argv, void *envp, int flags)
+{
+}
+
+int my_setprocattr(const char *name, void *value, size_t size)
+{
+    return 1;
+}
+
+ssize_t my_write_context(struct file *file, const char __user *buf, size_t size, loff_t *ppos)
+{
+    return 0;
+}
+
+ssize_t my_write_access(struct file *file, const char __user *buf, size_t size, loff_t *ppos)
+{
+    return 0;
+}
+EOF
+
+  if [ -f "drivers/kernelsu/Kbuild" ]; then
+    echo "obj-y += compat_bridge.o" >> drivers/kernelsu/Kbuild
+  elif [ -f "drivers/kernelsu/Makefile" ]; then
+    echo "obj-y += compat_bridge.o" >> drivers/kernelsu/Makefile
+  fi
+  
+  log "Committing compat_bridge changes to clear KSU dirty version"
+  cd drivers/kernelsu
+  git config user.email "build@dummy.com" || true
+  git config user.name "Dummy Builder" || true
+  git add compat_bridge.c Kbuild Makefile 2>/dev/null || true
+  git commit -m "inject: KSU & SELinux Bridge Symbols" || true
+  cd ../../
 fi
 
 if [ "$NM" = "true" ]; then
@@ -200,17 +230,48 @@ set +eo pipefail
 AK3_ZIP_NAME=${AK3_ZIP_NAME//KVER/$LINUX_VERSION}
 AK3_ZIP_NAME=${AK3_ZIP_NAME//VARIANT/$VARIANT}
 
-log "Applying configs..."
-source "$WORKDIR/configs/gki_defconfig.sh"
+log "Applying inline defconfigs..."
+
+cat << 'EOF' >> arch/arm64/configs/gki_defconfig
+CONFIG_RCU_TRACE=n
+CONFIG_BBG=y
+CONFIG_NTSYNC=y
+EOF
+
+if [ "$KSU" != "no" ]; then
+  cat << 'EOF' >> arch/arm64/configs/gki_defconfig
+CONFIG_KSU=y
+CONFIG_KPM=y
+CONFIG_KSU_SENTINEL=y
+EOF
+fi
 
 if [ "$NM" = "true" ]; then
-  config --enable CONFIG_NOMOUNT
+  echo "CONFIG_NOMOUNT=y" >> arch/arm64/configs/gki_defconfig
+fi
+
+if susfs_included; then
+  cat << 'EOF' >> arch/arm64/configs/gki_defconfig
+CONFIG_KSU_SUSFS=y
+CONFIG_KSU_SUSFS_SUS_MAP=y
+CONFIG_KSU_SUSFS_SUS_PATH=y
+CONFIG_KSU_SUSFS_SUS_MOUNT=y
+CONFIG_KSU_SUSFS_SUS_KSTAT=y
+CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+CONFIG_KSU_SUSFS_ENABLE_LOG=y
+CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
+CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+CONFIG_KSU_INLINE_HOOK=y
+CONFIG_KSU_SUSFS_SUS_MEMFD=y
+CONFIG_KSU_SUSFS_SUS_PROC_FD_LINK=y
+EOF
 fi
 
 if [ "${TODO:-kernel}" = "kernel" ]; then
   LATEST_COMMIT_HASH=$(git rev-parse --short HEAD)
-  config --set-str CONFIG_LOCALVERSION "-android15-11-g${LATEST_COMMIT_HASH}"
-  config --disable CONFIG_LOCALVERSION_AUTO
+  ./scripts/config --file arch/arm64/configs/gki_defconfig --set-str CONFIG_LOCALVERSION "-android15-11-g${LATEST_COMMIT_HASH}"
+  ./scripts/config --file arch/arm64/configs/gki_defconfig --disable CONFIG_LOCALVERSION_AUTO
   sed -i 's/echo "+"/# echo "+"/g' scripts/setlocalversion
 fi
 

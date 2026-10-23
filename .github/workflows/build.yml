@@ -22,6 +22,11 @@ on:
           - "no"
           - "yes"
 
+      CLEAN_BUILD:
+        description: "Force a scratch (clean) build (0% Cache)"
+        type: boolean
+        default: true
+
       LTO:
         description: enable LTO optimization
         default: "full"
@@ -144,8 +149,9 @@ jobs:
           sudo apt-get install -y libdw-dev ccache gh bc bison flex libssl-dev libelf-dev cmake zlib1g-dev cpio zip
           pip install lxml
 
+      # यदि Clean Build सेलेक्ट किया है, तो यह कैशे को रीस्टोर नहीं करेगा!
       - name: Restore ccache from release
-        if: github.event.inputs.TEST == 'no' && github.event.inputs.TODO != 'defconfig'
+        if: github.event.inputs.TEST == 'no' && github.event.inputs.TODO != 'defconfig' && github.event.inputs.CLEAN_BUILD == 'false'
         id: restore-ccache
         uses: ./.github/actions/ccache-restore
         with:
@@ -164,6 +170,7 @@ jobs:
           No_DS: ${{ matrix.No_DS }}
           TODO: ${{ inputs.TODO }}
           TEST: ${{ inputs.TEST }}
+          CLEAN_BUILD: ${{ inputs.CLEAN_BUILD }}
           LTO: ${{ inputs.LTO }}
           CLEAN_LTO_CACHE: ${{ inputs.CLEAN_LTO_CACHE }}
           DROIDSPACES: ${{ inputs.DROIDSPACES }}

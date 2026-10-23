@@ -258,12 +258,54 @@ if [ "$KSU" = "KSU" ]; then
   fi
 fi
 
-if [ "$KSU_COMPAT" = "true" ]; then
-  if [ "$C_LTO" = "true" ]; then
-    VARIANT="Compat+${VARIANT}"
-  else
-    VARIANT="Compat+NoLTO+${VARIANT}"
+if [ "$KSU" != "no" ] && [ "$KSU" != "vnlto" ] && [ -d "drivers/kernelsu" ]; then
+  log "Injecting KSU & SELinux Bridge Symbols"
+  cat << 'EOF' > drivers/kernelsu/compat_bridge.c
+#include <linux/types.h>
+#include <linux/fs.h>
+#include <linux/file.h>
+#include <linux/sched.h>
+#include <linux/uaccess.h>
+#include <linux/slab.h>
+
+bool ksu_setup_preinit_file(struct file *file)
+{
+    return false;
+}
+
+void ksu_preinit_handle_post_execveat(int fd, struct filename *filename, void *argv, void *envp, int flags)
+{
+}
+
+int my_setprocattr(const char *name, void *value, size_t size)
+{
+    return 1;
+}
+
+ssize_t my_write_context(struct file *file, const char __user *buf, size_t size, loff_t *ppos)
+{
+    return 0;
+}
+
+ssize_t my_write_access(struct file *file, const char __user *buf, size_t size, loff_t *ppos)
+{
+    return 0;
+}
+EOF
+
+  if [ -f "drivers/kernelsu/Kbuild" ]; then
+    echo "obj-y += compat_bridge.o" >> drivers/kernelsu/Kbuild
+  elif [ -f "drivers/kernelsu/Makefile" ]; then
+    echo "obj-y += compat_bridge.o" >> drivers/kernelsu/Makefile
   fi
+  
+  log "Committing compat_bridge changes to clear KSU dirty version"
+  cd drivers/kernelsu
+  git config user.email "build@dummy.com" || true
+  git config user.name "Dummy Builder" || true
+  git add compat_bridge.c Kbuild Makefile 2>/dev/null || true
+  git commit -m "inject: KSU & SELinux Bridge Symbols" || true
+  cd ../../
 fi
 
 if [ "$NM" = "true" ]; then

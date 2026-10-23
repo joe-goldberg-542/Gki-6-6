@@ -10,10 +10,7 @@ from copy import deepcopy
 DEFAULT = {
 	"name": "Dummy",
 	"KSU": "Dummy",
-	"KSU_COMPAT": "false",
-	"KSU_SUSFS": "false",
-	"C_LTO": "true",
-	"No_DS": "true"
+	"KSU_SUSFS": "false"
 }
 
 def config(**overrides) -> Dict[str, Any]:
@@ -22,7 +19,7 @@ def config(**overrides) -> Dict[str, Any]:
 	cfg.update(overrides)
 	return cfg
 
-# Build configurations (Only Compat + BakaSU + SuSFS + FullLTO)
+# Build configurations
 BUILD_CONFIGS: Dict[str, List[Dict[str, Any]]] = {
 	"BUILD_VANILLA": [
 		config(name="Vanilla", KSU="no"),
@@ -33,17 +30,14 @@ BUILD_CONFIGS: Dict[str, List[Dict[str, Any]]] = {
 	],
 	"BUILD_KSU_SUSFS": [
 		config(
-			name="Compat+BSU+SUSFS",
+			name="BSU+SUSFS",
 			KSU="BSU",
-			KSU_COMPAT="true",
-			KSU_SUSFS="true",
-			C_LTO="true",
-			No_DS="true"
+			KSU_SUSFS="true"
 		)
 	]
 }
 
-ALL_KERNEL_VERSIONS: List[str] = ["5.10", "5.15", "6.1", "6.6", "6.12"]
+ALL_KERNEL_VERSIONS: List[str] = ["6.6"]
 
 def get_env_bool(var_name: str, default: bool = False) -> bool:
 	"""Read environment variable as boolean."""
@@ -53,18 +47,7 @@ def get_env_bool(var_name: str, default: bool = False) -> bool:
 	return value in ("true", "1", "yes", "on")
 
 def resolve_kernel_versions() -> List[str]:
-	selected = os.environ.get("KERNEL_VERSION", "6.6").strip()
-
-	if not selected or selected.lower() == "all":
-		return ALL_KERNEL_VERSIONS
-
-	if selected not in ALL_KERNEL_VERSIONS:
-		raise ValueError(
-			f"Unknown KERNEL_VERSION='{selected}'. "
-			f"Expected 'All' or one of: {', '.join(ALL_KERNEL_VERSIONS)}"
-		)
-
-	return [selected]
+	return ["6.6"]
 
 def generate_matrix() -> Dict[str, List[Dict[str, Any]]]:
 	variant_entries = []

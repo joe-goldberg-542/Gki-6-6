@@ -124,6 +124,11 @@ ccache --set-config=hash_dir=false
 ccache --set-config=base_dir="$WORKDIR"
 ccache --set-config=compiler_check=content
 
+if [ "${CLEAN_BUILD:-false}" = "true" ]; then
+  log "Force Scratch Build! Clearing old ccache completely..."
+  ccache --clear
+fi
+
 COMPILER_STRING=$(clang -v 2>&1 | head -n 1 | sed 's/(https..*//' | sed 's/ version//')
 echo "COMPILER_STRING=$COMPILER_STRING" >> "$GITHUB_ENV"
 
@@ -338,9 +343,7 @@ elif [ "${LTO:-full}" = "none" ]; then
   ./scripts/config --file "$OUTDIR/.config" -d LTO_CLANG_THIN -d LTO_CLANG_FULL -e LTO_NONE
   MAKE_ARGS+=(LTO=none)
 fi
-# Re-sync modified .config back to compilation phase variables
 make "${MAKE_ARGS[@]}" olddefconfig > /dev/null
-
 echo "::endgroup::"
 
 if susfs_included; then

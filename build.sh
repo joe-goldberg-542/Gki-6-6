@@ -121,6 +121,19 @@ export NH="false"
 
 cleanup_abi_gki_protected_exports
 
+if [ -d "kernel/sched/walt" ]; then
+  log "Patching WALT governor (Retaining App Launch Boost)"
+  sed -i 's/queue_work(input_boost_wq, &input_boost_work);/\/\* killed schedutil-style \*\//g' kernel/sched/walt/input-boost.c
+  sed -i 's/if (wg_policy->tunables->pl)/if (0)/g' kernel/sched/walt/cpufreq_walt.c
+  sed -i 's/#define DEFAULT_HISPEED_LOAD 90/#define DEFAULT_HISPEED_LOAD 105/g' kernel/sched/walt/cpufreq_walt.c
+  sed -i 's/if (wrq->ed_task)/if (0)/g' kernel/sched/walt/walt.c
+  sed -i 's/if (should_apply_suh_freq_boost(cluster))/if (0)/g' kernel/sched/walt/walt.c
+  sed -i 's/if (wrq->lrb_pipeline_start_time)/if (0)/g' kernel/sched/walt/walt.c
+  sed -i 's/wtg->sched_boost_enable\[BALANCE_BOOST\] = true/wtg->sched_boost_enable\[BALANCE_BOOST\] = false/g' kernel/sched/walt/boost.c
+  sed -i 's/#define DEFAULT_SILVER_RTG_BOOST_FREQ 1000000/#define DEFAULT_SILVER_RTG_BOOST_FREQ 0/g' kernel/sched/walt/cpufreq_walt.c
+  sed -i 's/#define DEFAULT_GOLD_RTG_BOOST_FREQ 768000/#define DEFAULT_GOLD_RTG_BOOST_FREQ 0/g' kernel/sched/walt/cpufreq_walt.c
+fi
+
 if [ "$KSU" = "BSU" ]; then
   log "BakaSU included (Merge Multiple Branches)"
   
@@ -234,11 +247,14 @@ log "Applying inline defconfigs..."
 
 cat << 'EOF' >> arch/arm64/configs/gki_defconfig
 CONFIG_RCU_TRACE=n
+CONFIG_BBG=y
+CONFIG_NTSYNC=y
 EOF
 
 if [ "$KSU" != "no" ]; then
   cat << 'EOF' >> arch/arm64/configs/gki_defconfig
 CONFIG_KSU=y
+CONFIG_KPM=y
 CONFIG_KSU_SENTINEL=y
 EOF
 fi

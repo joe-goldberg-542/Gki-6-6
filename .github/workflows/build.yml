@@ -1,4 +1,4 @@
-name: GKID Builder
+name: kernel Builder
 permissions:
   contents: write
   actions: write
@@ -22,11 +22,6 @@ on:
           - "no"
           - "yes"
 
-      CLEAN_BUILD:
-        description: "Force a scratch (clean) build (0% Cache)"
-        type: boolean
-        default: true
-
       LTO:
         description: enable LTO optimization
         default: "full"
@@ -35,15 +30,6 @@ on:
           - "none"
           - "thin"
           - "full"
-
-      KERNEL_VERSION:
-        description: "GKI LTS kernel line to build"
-        default: "6.6"
-        type: choice
-        options:
-          - "All"
-          - "6.6"
-          - "6.12"
 
       BUILD_VANILLA:
         description: "Build Vanilla (no KSU)"
@@ -57,11 +43,6 @@ on:
 
       BUILD_KSU_SUSFS:
         description: "Build with KernelSU and its forks + SUSFS"
-        type: boolean
-        default: true
-
-      CLEAN_LTO_CACHE:
-        description: "Clean ThinLTO cache to fix .config bug"
         type: boolean
         default: true
 
@@ -99,39 +80,15 @@ jobs:
       - name: Generate build matrix
         id: set-matrix
         env:
-          KERNEL_VERSION: ${{ github.event.inputs.KERNEL_VERSION }}
+          KERNEL_VERSION: "6.6"
           BUILD_VANILLA: ${{ github.event.inputs.BUILD_VANILLA }}
           BUILD_KSU: ${{ github.event.inputs.BUILD_KSU }}
           BUILD_KSU_SUSFS: ${{ github.event.inputs.BUILD_KSU_SUSFS }}
         run: |
           python3 py/generate-matrix.py >> "$GITHUB_OUTPUT"
 
-  ensure-cache-release:
-    name: Ensure ccache release exists
-    needs: prepare
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Create persistent cache release if missing
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          if gh release view ci-ccache-store --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            echo "ci-ccache-store already exists"
-          else
-            echo "Creating ci-ccache-store release"
-            gh release create ci-ccache-store \
-              --repo "${{ github.repository }}" \
-              --title "CI ccache store (internal - do not delete)" \
-              --notes "Persistent compiler cache used by the build workflow." \
-              --prerelease \
-              --latest=false
-          fi
-
   build:
-    needs:
-      - prepare
-      - ensure-cache-release
+    needs: prepare
     runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
@@ -146,23 +103,13 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libdw-dev ccache gh bc bison flex libssl-dev libelf-dev cmake zlib1g-dev cpio zip
+          sudo apt-get install -y libdw-dev gh bc bison flex libssl-dev libelf-dev cmake zlib1g-dev cpio zip
           pip install lxml
-
-      # यदि Clean Build सेलेक्ट किया है, तो यह कैशे को रीस्टोर नहीं करेगा!
-      - name: Restore ccache from release
-        if: github.event.inputs.TEST == 'no' && github.event.inputs.TODO != 'defconfig' && github.event.inputs.CLEAN_BUILD == 'false'
-        id: restore-ccache
-        uses: ./.github/actions/ccache-restore
-        with:
-          repo: ${{ github.repository }}
-          token: ${{ github.token }}
-          variant: ${{ matrix.name }}
 
       - name: Run Build Script
         env:
           GH_TOKEN: ${{ github.token }}
-          KERNEL_VERSION: ${{ matrix.kernel_version }}
+          KERNEL_VERSION: "6.6"
           KSU: ${{ matrix.KSU }}
           KSU_COMPAT: ${{ matrix.KSU_COMPAT }}
           KSU_SUSFS: ${{ matrix.KSU_SUSFS }}
@@ -170,9 +117,7 @@ jobs:
           No_DS: ${{ matrix.No_DS }}
           TODO: ${{ inputs.TODO }}
           TEST: ${{ inputs.TEST }}
-          CLEAN_BUILD: ${{ inputs.CLEAN_BUILD }}
           LTO: ${{ inputs.LTO }}
-          CLEAN_LTO_CACHE: ${{ inputs.CLEAN_LTO_CACHE }}
           DROIDSPACES: ${{ inputs.DROIDSPACES }}
           NH: ${{ inputs.NH }}
           NM: ${{ inputs.NM }}
@@ -267,19 +212,6 @@ jobs:
           BOOT_IMG_NAME="GKID-${VARIANT}-${RELEASE}-${LINUX_VERSION}-boot.img"
           cp repack/output/boot.img "artifacts/$BOOT_IMG_NAME"
           echo "::endgroup::"
-
-      - name: ccache stats
-        if: always()
-        run: |
-          ccache --show-stats
-
-      - name: Save ccache to release
-        if: always() && github.event.inputs.TEST == 'no' && github.event.inputs.TODO != 'defconfig'
-        uses: ./.github/actions/ccache-save
-        with:
-          repo: ${{ github.repository }}
-          token: ${{ github.token }}
-          variant: ${{ matrix.name }}
 
       - name: Save environment for release
         if: always()

@@ -247,14 +247,11 @@ log "Applying inline defconfigs..."
 
 cat << 'EOF' >> arch/arm64/configs/gki_defconfig
 CONFIG_RCU_TRACE=n
-CONFIG_BBG=y
-CONFIG_NTSYNC=y
 EOF
 
 if [ "$KSU" != "no" ]; then
   cat << 'EOF' >> arch/arm64/configs/gki_defconfig
 CONFIG_KSU=y
-CONFIG_KPM=y
 CONFIG_KSU_SENTINEL=y
 EOF
 fi

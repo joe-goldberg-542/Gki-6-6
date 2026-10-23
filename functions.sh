@@ -8,26 +8,6 @@ resolve_susfs_branch() {
   echo "gki-android15-6.6"
 }
 
-install_ksu() {
-  local REPO="$1"
-  local REF="$2"
-  local URL
-
-  if [ -z "$REPO" ] || [ -z "$REF" ]; then
-    echo "Usage: install_ksu <user/repo> <ref>"
-    exit 1
-  fi
-
-  URL="https://raw.githubusercontent.com/$REPO/$REF/kernel/setup.sh"
-  log "Installing KernelSU from $REPO | $REF"
-  curl -LSs "$URL" | bash -s "$REF"
-}
-
-ksu_included() {
-  [ "$KSU" == "yes" ]
-  return $?
-}
-
 susfs_included() {
   [ "$KSU_SUSFS" == "true" ]
   return $?
@@ -36,10 +16,6 @@ susfs_included() {
 simplify_gh_url() {
   local URL="$1"
   echo "$URL" | sed "s|https://github.com/||g" | sed "s|.git||g"
-}
-
-config() {
-  $KSRC/scripts/config --file $DEFCONFIG_FILE $@
 }
 
 log() {
@@ -68,7 +44,6 @@ retry() {
         if "$@"; then
             return 0
         fi
-
         error "Command failed (attempt $attempt/$max_attempts): $*"
         log "Retrying in ${delay}s..."
         sleep $delay
@@ -97,7 +72,6 @@ bash() {
 git() {
     local cmd="$1"
     shift
-
     case "$cmd" in
         clone|fetch|pull|push|ls-remote|submodule)
             retry command git "$cmd" "$@"
@@ -119,71 +93,6 @@ generate_gh_changelog() {
     gh api "repos/${repo}/commits?sha=${branch}&per_page=${count}" \
         --jq '.[] | "- [" + .sha[0:7] + "](" + .html_url + ") " + (.commit.message | split("\n")[0])' \
         > "$output"
-}
-
-apply_patch_file() {
-    local patch="$1"
-    local patch_data=""
-
-    if [[ -n "$patch" && -f "$patch" ]]; then
-        patch_data=$(cat "$patch")
-        info "Applying: $(basename "$patch")"
-    elif [[ -n "$patch" ]]; then
-        patch_data="$patch"
-        info "Applying patch from data"
-    else
-        patch_data=$(cat)
-        info "Applying patch from stdin"
-    fi
-
-    [[ -z "$patch_data" ]] && { error "No patch data"; return 1; }
-
-    if echo "$patch_data" | git apply --check - 2>/dev/null; then
-        if echo "$patch_data" | git apply - 2>/dev/null; then
-            success "Applied patch successfully"
-            return 0
-        fi
-    fi
-
-    warning "git apply failed, trying patch with fuzz"
-
-    if ! echo "$patch_data" | patch -p1 --fuzz=3 --dry-run 2>/dev/null; then
-        warning "Skipping: patch does not apply"
-        return 1
-    fi
-
-    if echo "$patch_data" | patch -p1 --fuzz=3 2>/dev/null; then
-        success "Applied patch with fuzz"
-        return 0
-    else
-        error "Failed to apply patch"
-        return 1
-    fi
-}
-
-apply_kernel_patches() {
-    local patch_dir="${1:-$KERNEL_PATCHES/common}"
-    local failed=0
-
-    [[ ! -d "$patch_dir" ]] && { error "$patch_dir not found"; return 1; }
-
-    local patches=()
-    while IFS= read -r -d '' patch; do
-        patches+=("$patch")
-    done < <(find "$patch_dir" -type f \( -name "*.patch" -o -name "*.diff" \) -print0 | sort -z -V)
-
-    [[ ${#patches[@]} -eq 0 ]] && { warning "No patches found in $patch_dir"; return 0; }
-
-    info "Found ${#patches[@]} patches in $patch_dir"
-
-    for patch in "${patches[@]}"; do
-        if ! apply_patch_file "$patch"; then
-            ((failed++))
-        fi
-    done
-
-    [[ $failed -eq 0 ]] && success "All patches applied successfully" || warning "Applied $((${#patches[@]} - failed))/${#patches[@]} patches, $failed failed"
-    return $failed
 }
 
 cleanup_abi_gki_protected_exports() {
@@ -277,29 +186,23 @@ build_and_install_pahole() {
     }
 
     cd "$start_dir"
-
     hash -r
+    
     if ! command -v pahole >/dev/null 2>&1; then
         error "pahole not found in PATH after install"
         return 1
     fi
-    if ! pahole --version >/dev/null 2>&1; then
-        error "pahole found but fails to run (check LD_LIBRARY_PATH/rpath)"
-        return 1
-    fi
-
+    
     success "pahole $(pahole --version | head -1) installed to $bin_dir"
     return 0
 }
 
 apply_susfs_patches() {
     log "Applying SUSFS patches"
-
     cp -R $SUSFS_PATCHES/fs/* ./fs
     cp -R $SUSFS_PATCHES/include/linux/* ./include/linux/
-
     patch -p1 --fuzz=3 < "$SUSFS_PATCHES/50_add_susfs_in_${SUSFS_PATCH}.patch"
-
+    
     SUSFS_VERSION=$(grep -E '^#define SUSFS_VERSION' ./include/linux/susfs.h | cut -d' ' -f3 | sed 's/"//g')
     echo "SUSFS_VERSION=$SUSFS_VERSION" >> $GITHUB_ENV
 }
@@ -312,5 +215,4 @@ clone_susfs() {
     else
         log "$SUSFS_DIR already exists, reusing existing clone"
     fi
-    log "susfs4ksu HEAD is now $(git -C "$SUSFS_DIR" rev-parse HEAD)"
 }

@@ -211,11 +211,10 @@ build_and_install_pahole() {
     local start_dir
     start_dir="$(pwd)"
 
-    export CCACHE_DIR="${CCACHE_DIR:-$HOME/.ccache}"
     export PATH="$bin_dir:$PATH"
     export LD_LIBRARY_PATH="$lib_dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
-    mkdir -p "$bin_dir" "$CCACHE_DIR"
+    mkdir -p "$bin_dir"
 
     if command -v apt-get >/dev/null 2>&1; then
         sudo apt-get remove -y --purge dwarves pahole 2>/dev/null || true
@@ -256,8 +255,6 @@ build_and_install_pahole() {
     cmake \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="$install_prefix" \
-        -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-        -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
         -DCMAKE_INSTALL_RPATH="$lib_dir" \
         -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
         -D__LIB=lib \

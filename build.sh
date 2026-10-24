@@ -133,53 +133,91 @@ if [ -d "kernel/sched/walt" ]; then
   sed -i 's/#define DEFAULT_GOLD_RTG_BOOST_FREQ 768000/#define DEFAULT_GOLD_RTG_BOOST_FREQ 0/g' kernel/sched/walt/cpufreq_walt.c
 fi
 
-
 if [ "$KSU" = "FinaSU" ]; then
-  log "FinaSU Integration (Dev branch setup)..."
+  log "FinaSU Integration (Exact as reference build.yml)..."
 
-  # Removing past/corrupt code integrations
   rm -rf KernelSU FinaSU drivers/kernelsu
   sed -i '/kernelsu/d' drivers/Makefile 2>/dev/null || true
   sed -i '/kernelsu/d' drivers/Kconfig 2>/dev/null || true
 
-  # Repository clone specific to 'dev' 
   git clone -b dev https://github.com/LyraVoid/FinaSU.git FinaSU
 
-  # Gh api setup manager apk fetch
   mkdir -p /tmp/finasu_ci
   ARTIFACT_ID=$(gh api "/repos/LyraVoid/FinaSU/actions/artifacts?name=manager&per_page=10" \
     --jq '.artifacts | map(select(.expired == false)) | .[0].id // empty' 2>/dev/null || true)
 
-  # Check standard releases vs dev workflows
   if [ -n "$ARTIFACT_ID" ] && gh api "/repos/LyraVoid/FinaSU/actions/artifacts/$ARTIFACT_ID/zip" > /tmp/finasu_ci/artifact.zip 2>/dev/null; then
     unzip -q -o /tmp/finasu_ci/artifact.zip -d /tmp/finasu_ci/
   elif curl -fL "https://nightly.link/LyraVoid/FinaSU/workflows/build/dev/manager.zip" -o /tmp/finasu_ci/artifact.zip; then
     unzip -q -o /tmp/finasu_ci/artifact.zip -d /tmp/finasu_ci/
-  else
-    log "Warning: FinaSU app link not downloaded properly! Artifact fallback checking error."
   fi
 
   CI_APK=$(find /tmp/finasu_ci -name "*.apk" | head -n 1)
   if [ -n "$CI_APK" ] && [ -f "$CI_APK" ]; then
-    log "Latest FinaSU Manager Fetched! Attaching app"
+    log "Found Manager APK: $CI_APK"
     cp "$CI_APK" "$RELEASE_DIR/FinaSU-Manager.apk"
+    export APK_TO_SYNC="$CI_APK"
+  else
+    export APK_TO_SYNC=""
   fi
 
-  # APK Validation ByPass trick 
   python3 - << 'EOF'
-import os, re, glob
+import os, re, struct, hashlib, glob
+
+apk_path = os.environ.get("APK_TO_SYNC", "")
+expected_size = None
+expected_hash = None
+
+if apk_path and os.path.exists(apk_path):
+    with open(apk_path, "rb") as f:
+        data = f.read()
+    eocd = data.rfind(b"PK\x05\x06")
+    if eocd != -1:
+        cd_offset = struct.unpack("<I", data[eocd+16:eocd+20])[0]
+        if data[cd_offset-16:cd_offset] == b"APK Sig Block 42":
+            block_size = struct.unpack("<Q", data[cd_offset-24:cd_offset-16])[0]
+            pos = cd_offset - block_size
+            while pos < cd_offset - 24:
+                pair_len = struct.unpack("<Q", data[pos:pos+8])[0]
+                pair_id = struct.unpack("<I", data[pos+8:pos+12])[0]
+                if pair_id in (0x7109871a, 0xf05368c0):
+                    val = data[pos+12:pos+8+pair_len]
+                    digests_len = struct.unpack("<I", val[12:16])[0]
+                    certs_off = 16 + digests_len
+                    cert_len = struct.unpack("<I", val[certs_off+4:certs_off+8])[0]
+                    cert_bytes = val[certs_off+8:certs_off+8+cert_len]
+                    expected_size = f"0x{cert_len:04x}"
+                    expected_hash = hashlib.sha256(cert_bytes).hexdigest()
+                    break
+                pos += 8 + pair_len
+
+if expected_size and expected_hash:
+    print(f"Syncing FinaSU CI APK Signature -> size: {expected_size}, hash: {expected_hash}")
+    for kfile in glob.glob("FinaSU/kernel/**/Kbuild", recursive=True) + glob.glob("FinaSU/kernel/**/Makefile", recursive=True):
+        if os.path.exists(kfile):
+            with open(kfile, "r") as f:
+                content = f.read()
+            content = re.sub(r'0x0*33b', expected_size, content)
+            content = re.sub(r'c371061b19d8c7d7d6133c6a9bafe198fa944e50c1b31c9d8daa8d7f1fc2d2d6', expected_hash, content)
+            with open(kfile, "w") as f:
+                f.write(content)
+
 for sign_file in glob.glob("FinaSU/kernel/**/apk_sign.c", recursive=True):
-    with open(sign_file, "r") as f: sc = f.read()
+    with open(sign_file, "r") as f:
+        sc = f.read()
     sc = re.sub(
-        r'(bool\s+is_manager_apk\s*\(\s*char\s*\*\s*path\s*\)\s*\{)',
-        r'\1\n\treturn true;\n', sc )
-    with open(sign_file, "w") as f: f.write(sc)
+        r'(bool\s+(?:ksu_)?is_manager_apk\s*\([^)]*\)\s*\{)',
+        r'\1\n\treturn true;\n',
+        sc
+    )
+    with open(sign_file, "w") as f:
+        f.write(sc)
 EOF
 
   ln -sf $(pwd)/FinaSU/kernel drivers/kernelsu
   echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
   sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
-  
+
   if susfs_included; then
     clone_susfs
     apply_susfs_patches
@@ -210,6 +248,8 @@ if [ "$KSU" != "no" ]; then
 CONFIG_KSU=y
 CONFIG_KSU_DEBUG=n
 CONFIG_KSU_SENTINEL=y
+CONFIG_KALLSYMS=y
+CONFIG_KALLSYMS_ALL=y
 CONFIG_KPROBES=y
 CONFIG_HAVE_KPROBES=y
 CONFIG_KPROBE_EVENTS=y

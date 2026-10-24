@@ -61,7 +61,7 @@ cd "$WORKDIR"
 log "Setting Kernel variant"
 case "$KSU" in
   "SKSU") VARIANT="SukiSU-Ultra" ;;
-  "BSU") VARIANT="BakaSU" ;;
+  "FinaSU") VARIANT="FinaSU" ;;
   "KSU") VARIANT="KernelSU" ;;
   "no") VARIANT="Vanilla" ;;
   "vnlto") VARIANT="Vanilla+NoLTO" ;;
@@ -86,7 +86,6 @@ cd "$WORKDIR"
 generate_gh_changelog "xiaomi-ravelin/android_kernel_xiaomi_sm4450" "$KERNEL_BRANCH" 10 "$RELEASE_DIR/android_kernel-6.6_changelog.txt"
 generate_gh_changelog "maxsteeel/nomount" "dev" 5 "$RELEASE_DIR/nomount_changelog.txt"
 generate_gh_changelog "tiann/KernelSU" "main" 5 "$RELEASE_DIR/ksu_changelog.txt"
-generate_gh_changelog "Baka-SU/BakaSU" "sync-susfs" 5 "$RELEASE_DIR/BakaSU_changelog.txt"
 
 echo "::group::[*] Downloading Clang"
 CLANG_BIN="$WORKDIR/neutron-clang/bin"
@@ -134,100 +133,57 @@ if [ -d "kernel/sched/walt" ]; then
   sed -i 's/#define DEFAULT_GOLD_RTG_BOOST_FREQ 768000/#define DEFAULT_GOLD_RTG_BOOST_FREQ 0/g' kernel/sched/walt/cpufreq_walt.c
 fi
 
-if [ "$KSU" = "BSU" ]; then
-  log "BakaSU included (Merge Multiple Branches)"
-  
-  curl -LSs "https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh" | bash -s main
-  
-  cd KernelSU
-  git config user.email "joe_goldberg_542@protonmail.com"
-  git config user.name "joe-goldberg-542"
-  
-  git fetch origin --prune
-  git checkout main
-  
-  BRANCHES=(
-    "sync-susfs"
-    "sync-upstream"
-    "renovate/maven-group-in-manager"
-    "renovate/gradle-9.x"
-  )
-  
-  for branch in "${BRANCHES[@]}"; do
-    echo "=========================================="
-    log "Merging origin/$branch into main..."
-    ACTUAL_BRANCH=$(git branch -r | grep -i "origin/$branch$" | sed 's/origin\///' | tr -d ' ' | head -n 1)
-    
-    if [ -n "$ACTUAL_BRANCH" ]; then
-      if git merge --no-edit "origin/$ACTUAL_BRANCH"; then
-        success "Successfully merged $ACTUAL_BRANCH"
-      elif git merge --no-edit -X theirs "origin/$ACTUAL_BRANCH"; then
-        warning "Merged $ACTUAL_BRANCH using auto-conflict resolution (-X theirs)"
-      else
-        error "Conflict in $ACTUAL_BRANCH could not be auto-resolved, skipping..."
-        git merge --abort || true
-      fi
-    else
-      warning "Branch $branch not found on remote!"
-    fi
-  done
-  
-  cd ..
+
+if [ "$KSU" = "FinaSU" ]; then
+  log "FinaSU Integration (Dev branch setup)..."
+
+  # Removing past/corrupt code integrations
+  rm -rf KernelSU FinaSU drivers/kernelsu
+  sed -i '/kernelsu/d' drivers/Makefile 2>/dev/null || true
+  sed -i '/kernelsu/d' drivers/Kconfig 2>/dev/null || true
+
+  # Repository clone specific to 'dev' 
+  git clone -b dev https://github.com/LyraVoid/FinaSU.git FinaSU
+
+  # Gh api setup manager apk fetch
+  mkdir -p /tmp/finasu_ci
+  ARTIFACT_ID=$(gh api "/repos/LyraVoid/FinaSU/actions/artifacts?name=manager&per_page=10" \
+    --jq '.artifacts | map(select(.expired == false)) | .[0].id // empty' 2>/dev/null || true)
+
+  # Check standard releases vs dev workflows
+  if [ -n "$ARTIFACT_ID" ] && gh api "/repos/LyraVoid/FinaSU/actions/artifacts/$ARTIFACT_ID/zip" > /tmp/finasu_ci/artifact.zip 2>/dev/null; then
+    unzip -q -o /tmp/finasu_ci/artifact.zip -d /tmp/finasu_ci/
+  elif curl -fL "https://nightly.link/LyraVoid/FinaSU/workflows/build/dev/manager.zip" -o /tmp/finasu_ci/artifact.zip; then
+    unzip -q -o /tmp/finasu_ci/artifact.zip -d /tmp/finasu_ci/
+  else
+    log "Warning: FinaSU app link not downloaded properly! Artifact fallback checking error."
+  fi
+
+  CI_APK=$(find /tmp/finasu_ci -name "*.apk" | head -n 1)
+  if [ -n "$CI_APK" ] && [ -f "$CI_APK" ]; then
+    log "Latest FinaSU Manager Fetched! Attaching app"
+    cp "$CI_APK" "$RELEASE_DIR/FinaSU-Manager.apk"
+  fi
+
+  # APK Validation ByPass trick 
+  python3 - << 'EOF'
+import os, re, glob
+for sign_file in glob.glob("FinaSU/kernel/**/apk_sign.c", recursive=True):
+    with open(sign_file, "r") as f: sc = f.read()
+    sc = re.sub(
+        r'(bool\s+is_manager_apk\s*\(\s*char\s*\*\s*path\s*\)\s*\{)',
+        r'\1\n\treturn true;\n', sc )
+    with open(sign_file, "w") as f: f.write(sc)
+EOF
+
+  ln -sf $(pwd)/FinaSU/kernel drivers/kernelsu
+  echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
+  sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
   
   if susfs_included; then
     clone_susfs
     apply_susfs_patches
   fi
-fi
-
-if [ "$KSU" != "no" ] && [ -d "drivers/kernelsu" ]; then
-  log "Injecting KSU & SELinux Bridge Symbols"
-  cat << 'EOF' > drivers/kernelsu/compat_bridge.c
-#include <linux/types.h>
-#include <linux/fs.h>
-#include <linux/file.h>
-#include <linux/sched.h>
-#include <linux/uaccess.h>
-#include <linux/slab.h>
-
-bool ksu_setup_preinit_file(struct file *file)
-{
-    return false;
-}
-
-void ksu_preinit_handle_post_execveat(int fd, struct filename *filename, void *argv, void *envp, int flags)
-{
-}
-
-int my_setprocattr(const char *name, void *value, size_t size)
-{
-    return 1;
-}
-
-ssize_t my_write_context(struct file *file, const char __user *buf, size_t size, loff_t *ppos)
-{
-    return 0;
-}
-
-ssize_t my_write_access(struct file *file, const char __user *buf, size_t size, loff_t *ppos)
-{
-    return 0;
-}
-EOF
-
-  if [ -f "drivers/kernelsu/Kbuild" ]; then
-    echo "obj-y += compat_bridge.o" >> drivers/kernelsu/Kbuild
-  elif [ -f "drivers/kernelsu/Makefile" ]; then
-    echo "obj-y += compat_bridge.o" >> drivers/kernelsu/Makefile
-  fi
-  
-  log "Committing compat_bridge changes to clear KSU dirty version"
-  cd drivers/kernelsu
-  git config user.email "build@dummy.com" || true
-  git config user.name "Dummy Builder" || true
-  git add compat_bridge.c Kbuild Makefile 2>/dev/null || true
-  git commit -m "inject: KSU & SELinux Bridge Symbols" || true
-  cd ../../
 fi
 
 if [ "$NM" = "true" ]; then
@@ -252,7 +208,12 @@ EOF
 if [ "$KSU" != "no" ]; then
   cat << 'EOF' >> arch/arm64/configs/gki_defconfig
 CONFIG_KSU=y
+CONFIG_KSU_DEBUG=n
 CONFIG_KSU_SENTINEL=y
+CONFIG_KPROBES=y
+CONFIG_HAVE_KPROBES=y
+CONFIG_KPROBE_EVENTS=y
+CONFIG_OVERLAY_FS=y
 EOF
 fi
 

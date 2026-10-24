@@ -41,8 +41,8 @@ on:
         type: boolean
         default: false
 
-      BUILD_KSU_SUSFS:
-        description: "Build with KernelSU and its forks + SUSFS"
+      BUILD_FINASU:
+        description: "Build with FinaSU (Dev) + SUSFS"
         type: boolean
         default: true
 
@@ -83,7 +83,7 @@ jobs:
           KERNEL_VERSION: "6.6"
           BUILD_VANILLA: ${{ github.event.inputs.BUILD_VANILLA }}
           BUILD_KSU: ${{ github.event.inputs.BUILD_KSU }}
-          BUILD_KSU_SUSFS: ${{ github.event.inputs.BUILD_KSU_SUSFS }}
+          BUILD_FINASU: ${{ github.event.inputs.BUILD_FINASU }}
         run: |
           python3 py/generate-matrix.py >> "$GITHUB_OUTPUT"
 
@@ -283,6 +283,7 @@ jobs:
             downloaded-artifacts/*.txt
             downloaded-artifacts/*.zip
             downloaded-artifacts/*.img
+            downloaded-artifacts/*.apk
             downloaded-artifacts/*.log
 
   release:
@@ -306,9 +307,9 @@ jobs:
         run: |
           cd release-artifacts
           shopt -s nullglob
-          files=(*.zip *.img)
+          files=(*.zip *.img *.apk)
           if [ ${#files[@]} -eq 0 ]; then
-            echo "::error::No .zip or .img files found to checksum!"
+            echo "::error::No .zip, .apk or .img files found to checksum!"
             exit 1
           fi
           sha256sum "${files[@]}" > checksums.txt
@@ -336,5 +337,6 @@ jobs:
           files: |
             release-artifacts/*.zip
             release-artifacts/*.img
+            release-artifacts/*.apk
             release-artifacts/checksums.txt
             release-artifacts/checksums-md5.txt
